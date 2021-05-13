@@ -1,0 +1,120 @@
+---
+title: "RSeq EDA"
+author: "Daniel Montemayor<br><small>Center for Renal Precision Medicine<br>University of Texas Health San Antonio School of Medicine</small>"
+date: "<small>`r Sys.Date()`</small>"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: false
+    toc_float: 
+      collapsed: false
+    code_folding: hide
+    theme: cerulean
+description: "Table 1 analysis."
+params:
+  file: "../rmap_full_11_25.csv"
+---
+
+![](https://dmontemayor.github.io/assets/Long_SOM/horizontal/JPG/UTHSA_Long-SOM_H_CMYK.jpg)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+# Requirements
+
+#list of required packages
+requirements <- c('stats', 'table1', 'gplots', 'corrplot')
+
+#install and load missing requirements
+for (pack in requirements){
+  if( !is.element(pack, .packages(all.available = TRUE)) ) {
+    install.packages(pack)
+  }
+  library(pack, character.only = TRUE)
+}
+```
+
+```{r}
+#dowload data
+df <- read.csv(params$file, stringsAsFactors = TRUE)
+```
+
+```{r}
+#the following variable names are pulled from the "guide_to_features.csv" accompaning code book.
+
+#declare bookeeping variables
+bookvars <- c("clean_name", "experiment", "control", "sample_name", "GSM", "SRX", "Group")
+
+#declare excluded variables
+exclvars <- c("Replicate", "Other")
+
+#declare outcomes
+outcomes <- c("cluster",
+              "xgbprob",
+              "xgbverdict",
+              "lmscore")
+
+#declare covariates
+covariates <- c("mode",
+                "paired_end",
+                "genome",
+                "strand_specific",
+                "moeity",
+                "ip_type",
+                "read_length",
+                "Species",
+                "Cell",
+                "Genotype",
+                "Condition",
+                "ControlType",
+                "Shearing_method",
+                "mode_group")
+
+#declare engineered features (remaining variables)
+features <- names(df[!names(df)%in%c(bookvars,exclvars,outcomes,covariates)])
+
+```
+
+
+# Table 1
+```{r, warning=FALSE}
+cond <- "mode_group"
+form <- as.formula(paste("~", paste(covariates[!covariates%in%cond], collapse = "+") , "|", cond, sep=""))
+tbl <- table1(form, data=df, caption = "Data characteristics grouped by mode group. Treatments and other experimental conditions are not shown.",)
+tbl
+```
+
+# Covariate Contingengy
+```{r, warning=FALSE}
+#find condition dependancies on engineered features 
+cond <- "mode_group"
+xvars <- covariates[!covariates%in%cond]
+xisq <-  data.frame(matrix(nrow=length(xvars), ncol = 3))
+names(xisq) <- c("Xsquared", "df", "pval")
+row.names(xisq) <- xvars
+for ( x in xvars){
+  #get contingency table
+  tbl <- table(df[,cond],df[,x])
+  #plot table
+  balloonplot(tbl, main=cond, xlab ="", ylab=x,
+            label = FALSE, show.margins = FALSE)
+  #calc chi-squared
+  deets <- chisq.test(tbl)
+  xisq[x, 1:3] <- deets[1:3]
+
+  #use pearson correlation of xi-squared residuals to quantify association between factors 
+  #corrplot(deets$residuals, is.cor = FALSE, 
+  #         title=paste(x,"to", cond, "Xi-sq residual correlation", sep=" "))
+
+}
+```
+
+# Chi-squared test 
+Test Null hypothesis that covariate factors are evenly distributed between mode groups. P-values are Bonferroni adjusted for multiple comparisons. Reject Null if adj_pval<.05.
+```{r}
+xisq$adj_pval <- p.adjust(xisq$pval, method = "bonferroni")
+xisq
+```
