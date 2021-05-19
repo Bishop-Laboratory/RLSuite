@@ -1,17 +1,18 @@
 name: eda
-channels:
-  - conda-forge
-  - bioconda
-  - defaults
+#channels:
+#  - conda-forge
+#  - bioconda
+#  - defaults
 dependencies:
-  - pylint
-  - pytest
-  - r-reutils
-  - r-tidyverse
-  - r-jsonlite
-  - bioconductor-rsamtools
-  - r-xml
-  - boa
-  - snakemake
-  - conda-build
-  - graphviz
+  #- pylint
+  #- pytest
+  #- r-rmarkdown
+  #- r-reutils
+  #- r-tidyverse
+  #- r-jsonlite
+  #- bioconductor-rsamtools
+  #- r-xml
+  #- boa
+  #- snakemake
+  #- conda-build
+  #- graphviz
