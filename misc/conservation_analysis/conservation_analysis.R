@@ -99,127 +99,54 @@ library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
 promoter <- getPromoters(TxDb=txdb, upstream=3000, downstream=3000)
 
-#tagMatrix <- returnTagMatrix(int lower bound of conservation group, upper bound of conservation group, S4 peaks) 
-returnTagMatrix <- function(lbound,ubound, rLoopRanges){
+#metaplot <- metaplotViaTagMatrix(int vector lower bound of conservation group, int vector upper bound of conservation group, S4 peaks) 
+metaplotViaTagMatrix <- function(lbound,ubound, rLoopRanges){
   #txdb<-hg38 required
-  rangesLimited <- rLoopRanges[which(rLoopRanges$pct_cons >lbound & rLoopRanges$pct_cons <ubound )]
   
+  if (length(lbound)!= length(ubound)){
+    print("Upper and lower bound vectors must be the same length!")
+    return(NULL)
+  }
+  
+  txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
   promoter <- getPromoters(TxDb=txdb, upstream=3000, downstream=3000)
-  tagMatrixrangesLimited <- getTagMatrix(rangesLimited, windows = promoter)
   
-  return(tagMatrixrangesLimited)
+  for(i in 1:length(lbound)){
+    rangesLimited <- rLoopRanges[which(rLoopRanges$pct_cons>lbound[i] & rLoopRanges$pct_cons <ubound[i])]
+    tagMatrixrangesLimited <- getTagMatrix(rangesLimited, windows = promoter)
+    label = paste(lbound[i],"-",ubound[i],"%",sep="")
+    print(plotAvgProf(tagMatrixrangesLimited, xlim=c(-3000, 3000), xlab=label))
+    
+  }
+  
+ return(TRUE) 
 }
 
-#Conservation groups are groups of R-loop windows within a specified range
-#of percent score
+lowerbound <- c(0,10,20,30,40,50,60,70,80)
+upperbound <- c(10,20,30,40,50,60,70,80,100)
+metaplotViaTagMatrix(lowerbound,upperbound,rl_cons)
 
-#Creating tag maticies and metaplots for conservation groups in increments
-#of 10% (not enough data to justify two groups for 80-90 and 90-100% conservation levels)
-
-tagMatrix_rl_cons_0_10 <- returnTagMatrix(0,10,rl_cons)
-tagMatrix_rl_cons_10_20 <- returnTagMatrix(10,20,rl_cons)
-tagMatrix_rl_cons_20_30 <- returnTagMatrix(20,30,rl_cons)
-tagMatrix_rl_cons_30_40 <- returnTagMatrix(30,40,rl_cons)
-tagMatrix_rl_cons_40_50 <- returnTagMatrix(40,50,rl_cons)
-tagMatrix_rl_cons_50_60 <- returnTagMatrix(50,60,rl_cons)
-tagMatrix_rl_cons_60_70 <- returnTagMatrix(60,70,rl_cons)
-tagMatrix_rl_cons_70_80 <- returnTagMatrix(70,80,rl_cons)
-tagMatrix_rl_cons_80_100 <- returnTagMatrix(80,100,rl_cons)
-
-plotAvgProf(tagMatrix_rl_cons_0_10, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_0_20")
-plotAvgProf(tagMatrix_rl_cons_10_20, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_10_20")
-plotAvgProf(tagMatrix_rl_cons_20_30, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_20_30")
-plotAvgProf(tagMatrix_rl_cons_30_40, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_30_40")
-plotAvgProf(tagMatrix_rl_cons_40_50, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_40_50")
-plotAvgProf(tagMatrix_rl_cons_50_60, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_50_60")
-plotAvgProf(tagMatrix_rl_cons_60_70, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_60_70")
-plotAvgProf(tagMatrix_rl_cons_70_80, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_70_80")
-plotAvgProf(tagMatrix_rl_cons_80_100, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons_80_100")
-
-##Peak annitation and upsetplots
+##Peak annotation and upsetplots
 
 #The same 10% increments were used to group the windows
 
-rl_cons_010_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >0 & rl_cons$pct_cons<10)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_1020_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >10 & rl_cons$pct_cons<20)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_2030_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >20 & rl_cons$pct_cons<30)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_3040_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >30 & rl_cons$pct_cons<40)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_4050_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >40 & rl_cons$pct_cons<50)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_5060_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >50 & rl_cons$pct_cons<60)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_6070_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >60 & rl_cons$pct_cons<70)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_7080_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >70 & rl_cons$pct_cons<80)], tssRegion=c(-3000, 3000),TxDb=txdb)
-rl_cons_80100_anno <- annotatePeak(rl_cons[which(rl_cons$pct_cons >80 & rl_cons$pct_cons<100)], tssRegion=c(-3000, 3000),TxDb=txdb)
+#upsetplot <- annotateAndUpset(int vector lower bound of conservation group, int vector upper bound of conservation group, S4 peaks)
+annotateAndUpset <- function(lbound,ubound,rLoopRanges){
 
-upsetplot(rl_cons_010_anno, vennpie = TRUE)
-upsetplot(rl_cons_1020_anno, vennpie = TRUE)
-upsetplot(rl_cons_2030_anno, vennpie = TRUE)
-upsetplot(rl_cons_3040_anno, vennpie = TRUE)
-upsetplot(rl_cons_4050_anno, vennpie = TRUE)
-upsetplot(rl_cons_5060_anno, vennpie = TRUE)
-upsetplot(rl_cons_6070_anno, vennpie = TRUE)
-upsetplot(rl_cons_7080_anno, vennpie = TRUE)
-upsetplot(rl_cons_80100_anno, vennpie = TRUE)
+    if (length(lbound)!= length(ubound)){
+    print("Upper and lower bound vectors must be the same length!")
+    return(NULL)
+    }
+    
+    for(i in 1:length(lbound)){
+      rl_annotated<- annotatePeak(rl_cons[which(rLoopRanges$pct_cons >lbound[i] &          rLoopRanges$pct_cons<ubound[i])], 
+                                       tssRegion=c(-3000, 3000),TxDb=txdb)
+      show(upsetplot(rl_annotated, vennpie = TRUE))
+    }
+    
+}
 
-##Pathway Enrichment 
-
-#Dotplots were commented out due to rendering issues
-rl_cons_010_path <- enrichPathway(as.data.frame(rl_cons_010_anno)$geneId)
-rl_cons_1020_path <- enrichPathway(as.data.frame(rl_cons_1020_anno)$geneId)
-rl_cons_2030_path <- enrichPathway(as.data.frame(rl_cons_2030_anno)$geneId)
-rl_cons_3040_path <- enrichPathway(as.data.frame(rl_cons_3040_anno)$geneId)
-rl_cons_4050_path <- enrichPathway(as.data.frame(rl_cons_4050_anno)$geneId)
-rl_cons_5060_path <- enrichPathway(as.data.frame(rl_cons_5060_anno)$geneId)
-rl_cons_6070_path <- enrichPathway(as.data.frame(rl_cons_6070_anno)$geneId)
-rl_cons_7080_path <- enrichPathway(as.data.frame(rl_cons_7080_anno)$geneId)
-rl_cons_80100_path <- enrichPathway(as.data.frame(rl_cons_80100_anno)$geneId)
-
-#dotplot(rl_cons_010_path,showCategory =20,title = "rl_cons 0-10% pctscore Pathways")
-#dotplot(rl_cons_1020_path,showCategory =20,title = "rl_cons 10-20% pctscore Pathways")
-#dotplot(rl_cons_2030_path,showCategory =20,title = "rl_cons 20-30% pctscore Pathways")
-#dotplot(rl_cons_3040_path,showCategory =20,title = "rl_cons 30-40% pctscore Pathways")
-#dotplot(rl_cons_4050_path,showCategory =20,title = "rl_cons 40-50% pctscore Pathways")
-#dotplot(rl_cons_5060_path,showCategory =20,title = "rl_cons 50-60% pctscore Pathways")
-#dotplot(rl_cons_6070_path,showCategory =20,title = "rl_cons 60-70% pctscore Pathways")
-#dotplot(rl_cons_7080_path,showCategory =20,title = "rl_cons 70-80% pctscore Pathways")
-#dotplot(rl_cons_80100_path,showCategory =20,title = "rl_cons 80-100% pctscore Pathways")
-
-datatable(subset(as.data.frame(rl_cons_010_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 0-10 percent score"),
-            filter = 'top')
-
-datatable(subset(as.data.frame(rl_cons_1020_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 10-20 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_2030_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 20-30 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_3040_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 30-40 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_4050_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 40-50 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_5060_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 50-60 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_6070_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 60-70 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_7080_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 70-80 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_80100_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 80-100 percent score"),
-            filter = 'top')
+annotateAndUpset(lowerbound,upperbound,rl_cons)
 
 ##Gene data tables 
 
@@ -255,15 +182,11 @@ gene_table<- function(lbound,ubound, rLoopRanges){
   )
 }
 
-GT010 <-gene_table(0,10,rl_anno_2)
-GT1020 <- gene_table(10,20,rl_anno_2)
-GT2030 <- gene_table(20,30,rl_anno_2)
-GT3040 <- gene_table(30,40,rl_anno_2)
-GT4050 <- gene_table(40,50,rl_anno_2)
-GT5060 <- gene_table(50,60,rl_anno_2)
-GT6070 <- gene_table(60,70,rl_anno_2)
-GT7080 <- gene_table(70,80,rl_anno_2)
-GT80100 <- gene_table(80,100,rl_anno_2)
+if(length(upperbound) == length(lowerbound)){
+  for(i in 1:length(upperbound)){
+    show(gene_table(lowerbound[i], upperbound[i], rl_anno_2))
+  }
+}
 
 ##Enrichment Analysis 
 
