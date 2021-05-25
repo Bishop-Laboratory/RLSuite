@@ -139,7 +139,7 @@ annotateAndUpset <- function(lbound,ubound,rLoopRanges){
     }
     
     for(i in 1:length(lbound)){
-      rl_annotated<- annotatePeak(rl_cons[which(rLoopRanges$pct_cons >lbound[i] &          rLoopRanges$pct_cons<ubound[i])], 
+      rl_annotated<- annotatePeak(rLoopRanges[which(rLoopRanges$pct_cons >lbound[i] &          rLoopRanges$pct_cons<ubound[i])], 
                                        tssRegion=c(-3000, 3000),TxDb=txdb)
       show(upsetplot(rl_annotated, vennpie = TRUE))
     }
