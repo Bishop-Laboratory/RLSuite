@@ -5,10 +5,17 @@ html_document:
 df_print: paged
 ---
 
-Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores. Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not. 
+
+Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores. Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not..
+
+```{r setup, include=FALSE, echo=FALSE}
+require("knitr")
+opts_knit$set(root.dir = "~/RSeq-supplemental-analysis/misc/conservation_analysis")
+getwd()
+```
 
 ```{r, echo=FALSE, message=FALSE}
-setwd("C:/Users/user/Desktop/RSeq-development/RSeq-development")
+getwd()
 ##### Correlation analysis #####
 library(tidyverse)
 library(ChIPpeakAnno)
@@ -19,7 +26,7 @@ library(DT)
 ## Steps to do the conservation analysis -- start here ##
 
 #Read in the results as a GRanges object
-rl_cons <- read_tsv("misc/conservation_analysis/data/hg38_10kb-widow_2.5kb-step_tiles.conservation_levels.bed", skip = 1,
+rl_cons <- read_tsv("data/hg38_10kb-widow_2.5kb-step_tiles.conservation_levels.bed", skip = 1,
                     col_names = c("name", "seqnames", "start", "end", "score"))
 rl_cons <- toGRanges(as.data.frame(rl_cons))
 
@@ -104,7 +111,7 @@ returnTagMatrix2 <- function(lbound,ubound, rLoopRanges){
 
 lowerbound <- c(0,10,20,30,40,50,60,70,80)
 upperbound <- c(10,20,30,40,50,60,70,80,100)
-returnTagMatrix2(lowerbound,upperbound,rl_cons) #rl_cons yields same trends 
+returnTagMatrix2(lowerbound,upperbound,rl_cons)
 ```
 
 
@@ -548,10 +555,3 @@ https://jbiol.biomedcentral.com/articles/10.1186/jbiol217 THO complex
 29. https://www.sciencedirect.com/topics/neuroscience/transcription-factor-elk-1
 30. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3588610/#:~:text=FoxM1%20functions%20in%20response%20to,once%20the%20damage%20is%20repaired.
 31. https://www.genecards.org/cgi-bin/carddisp.pl?gene=E2F7
-
-
-
-
-
-
-
