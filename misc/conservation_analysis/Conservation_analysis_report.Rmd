@@ -399,6 +399,7 @@ datatable(e80100[e80100$P.value>=0.01 & e80100$P.value<=0.05,],
 ```
 
 70-80% Conservation:
+https://maayanlab.cloud/Enrichr/enrich?dataset=79c154d7f327e99466fcf36bb1b59a39
 * ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
 * PKCTHETA/BREAST - Activation of mature T cells [15]; 
 * DMRT1/FETAL Ovary - Vertebrate sex determination [16];
@@ -421,6 +422,7 @@ datatable(e7080[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
 ```
 
 60-70% Conservation:
+https://maayanlab.cloud/Enrichr/enrich?dataset=5ee5a9c14b529497c6dda82f4a953f18
 * EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
 * ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
 * KDM6A/U937 and SAOS2 - catalyzes demethylation of histone H3[20]; Pleura/pleural effusion, lymphocyte, myeloid monocyte Histiocytic lymphoma + Bone epithelial Osteosarcoma
@@ -441,6 +443,7 @@ datatable(e6070[e6070$P.value>=0.01 & e6070$P.value<=0.05,],
 ```
 
 50-60% Conservation (unordered ranking):
+https://maayanlab.cloud/Enrichr/enrich?dataset=241b3fb3a27245fc21eea20ca0626605
 * ELF3/PDAC-Cell line - Associated with Sarcoma, Synovial and Ampulla of Vater Cancer [22]; Pancreatic Ductal adenocarcinoma
 * KLF4/PDAC-Cell line - Mediates p53(tumor supressor) gene, thereby controlling G1-to-S cell cycle transition after Dna damage[23];Pancreatic Ductal adenocarcinoma
 * EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
@@ -460,6 +463,7 @@ datatable(e5060[e5060$P.value>=0.01 & e5060$P.value<=0.05,],
 ```
 
 40-50% Conservation: 
+https://maayanlab.cloud/Enrichr/enrich?dataset=f3ef676d09ac7fd0ee717c2cd6c7f577
 * Percent score 40-50%; very low combined score. Therefore lower Z score; pathways are not significantly enriched compared to the mean rank at this conservation level(?).
 * General trend before this group was a decrease in number of terms which are enriched. 
 * E2F1/MCF-7 - plays a role in cell cycle progression and controls tumor suppresor protiens [25];Breast epithelial Adenocarcinoma
@@ -482,6 +486,7 @@ datatable(e4050[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
 ```
 
 30-40% Conservation:
+https://maayanlab.cloud/Enrichr/enrich?dataset=3ea142080e4a4d7c3de3d0d4f5d9e3b9
 - E2F7/HELA - Cell cycle progression[31]; cancerous-cervical epithelial
 - FOXM1/OE33 and U2OS - Implicated in DNA drepair, senscence, and tumor proliferation[30]; Human esophagus and Epithelial bone Osteosarcoma (respectively)
 ```{r}
@@ -498,6 +503,8 @@ datatable(e3040[e3040$P.value>=0.01 & e3040$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
+20-30% Conservation:
+https://maayanlab.cloud/Enrichr/enrich?dataset=0ccdc80016e7b3d65a0f3b3af2cfbea7
 ```{r}
 rl2030 <- rl_anno_2[which(rl_anno_2$pct_cons >20 & rl_anno_2$pct_cons <30 )]
 rl2030_symbols <- unique(rl2030$symbol)
