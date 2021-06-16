@@ -1,6 +1,6 @@
 ---
 title: "Conservation analysis - report"
-output:
+output: 
 html_document:
 df_print: paged
 ---
@@ -30,6 +30,7 @@ library(rtracklayer)
 rl_cons <- read_tsv("data/hg38_10kb-widow_2.5kb-step_tiles.conservation_levels.bed", skip = 1,
                     col_names = c("name", "seqnames", "start", "end", "score"))
 rl_cons <- toGRanges(as.data.frame(rl_cons))
+
 
 # The score column of rl_cons represents the number of samples overlapping with that 10kb range
 # See the histogram of scores
@@ -86,113 +87,90 @@ Knowing this, I would expect the see groups of windows with higher percent score
 After creating the returnTagMatrix function (for better readability), I repeat the process in increments of 10 (except for windows with percent scores greater than 80. There were too few windows to justify ploting 80-90 and/or 90-100 percents score windows).
 
 ```{r,out.width=50%}
-rl_cons <- rl_cons[which(rl_cons$pct_cons !=  0)]
+rl_cons <- rl_cons[which(rl_cons$pct_cons >=  10)]
+rl_list<-split(rl_cons, ceiling(rl_cons$pct_cons /10))
 
-returnTagMatrix2 <- function(lbound,ubound, rLoopRanges){
-  #txdb<-hg38 required
-  
-  if (length(lbound)!= length(ubound)){
-    print("Upper and lower bound vectors must be the same length!")
-    return(NULL)
-  }
-  
-  txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
-  promoter <- getPromoters(TxDb=txdb, upstream=3000, downstream=3000)
-  
-  for(i in 1:length(lbound)){
-    rangesLimited <- rLoopRanges[which(rLoopRanges$pct_cons>lbound[i] & rLoopRanges$pct_cons <ubound[i])]
-    tagMatrixrangesLimited <- getTagMatrix(rangesLimited, windows = promoter)
-    label = paste(lbound[i],"-",ubound[i],"%",sep="")
-    print(plotAvgProf(tagMatrixrangesLimited, xlim=c(-3000, 3000), xlab=label))
-    
-  }
-  
- return(TRUE) 
+returnTagMatrix<-function(peaks){
+  tm <- getTagMatrix(peaks,
+                     windows = promoter
+                     )
+
+  print(plotAvgProf(tm,
+            xlim = c(-3000,3000),
+              xlab = paste(min(peaks$pct_cons),"-",max(peaks$pct_cons),sep="")))
+  print(min(peaks$pct_cons))
 }
 
-lowerbound <- c(0,10,20,30,40,50,60,70,80)
-upperbound <- c(10,20,30,40,50,60,70,80,100)
-returnTagMatrix2(lowerbound,upperbound,rl_cons)
+lowerbound <- c(10,20,30,40,50,60,70,80)
+upperbound <- c(20,30,40,50,60,70,80,100)
+lapply(rl_list,returnTagMatrix)
 ```
-
 
 My hypothesis was incorrect. Instead of the curve becoming more flat as I plotted higher scoring windows, each group after 40% showed a simlar curve, normally distributed around the TSS. The same remarks hold true for the higher scoring groups, that peaks would be found at and near the TSS. But as the percent score increases, there doesn't appear to be any change in where peaks are located. 
 I was also incorrect with lower scoring windows. Between percent scores of 0-39%, curves are inversions of what is seen with higher scoring peaks. 
 It seems then that lesser conserved RLoops are unlikely to be found near the TSS of a gene and more conserved Rloops are more likely to be found near the TSS.
 
-Applying a uniform transformation to rl_cons:
-To the percent score of rl_cons I apply a log, cubed root, and squared root transformation and then generate the resulting Q-Q plot and histogram.
+
 ```{r}
-preT<-rl_cons$pct_cons
+#rank windows according to percent score
+rl_consDf <- as.data.frame(rl_cons)
+rl_consDf <- as.data.frame(rl_consDf%>%arrange(pct_cons))
+rl_consRanked<- makeGRangesFromDataFrame(rl_consDf, keep.extra.columns = TRUE)
 
+#creating Granges list to divide rl_cons
+lim <- nrow(rl_consDf)
+#divide rl_consRanked by tenths 
+denominator<- as.integer(lim/10)
+test<-split(rl_consRanked,ceiling(seq_along(rl_consRanked)/denominator))
 
-show(hist(preT))
-#library(rcompanion)
-plots <- function(data){
-  
-  qqnorm(data, pch = 1, frame = FALSE)
-  qqline(data, col = "steelblue", lwd = 2)
-  
-  #log
-  show(hist(log(data)))
-  qqnorm(log(data), pch = 1, frame = FALSE)
-  qqline(log(data), col = "steelblue", lwd = 2)
-  #shapiro.test(subsampleGRanges(log(data), n=5000))
-  
-  #cubed root
-  hist(sign(data) * abs(data)^(1/3))
-  qqnorm(sign(data) * abs(data)^(1/3), pch = 1, frame = FALSE)
-  qqline(sign(data) * abs(data)^(1/3), col = "steelblue", lwd = 2)
-  #shapiro.test(subsampleGRanges(sign(data) * abs(data)^(1/3)), n=5000)
-  
-  #square root 
-  hist(sqrt(data))
-  qqnorm(sqrt(data), pch = 1, frame = FALSE)
-  qqline(sqrt(data), col = "steelblue", lwd = 2)
-  #shapiro.test(subsampleGRanges(sqrt(data)), n=5000)
-  }
-
-
-plots(preT)
-#chose log transformation 
-
+#generate metaplots
+lapply(test[1:10],returnTagMatrix)
 
 ```
-The log transformation appears to perform the best normalization of the percent score. Below, I apply the log transformation and generate metaplots, each with an equal number of windows. The windows were sorted according to the transformed percent score prior to plotting. 
+
+The same trend shown by the first group of metaplots is true for the transformed data as well; lower percent scoring windows tend to be further from the TSS compared to higher percenting scoring windows. 
 
 ```{r}
-#apply log transformation to rl_cons
-rl_cons$normal <- log(rl_cons$pct_cons)
+#library(regioneR)
 
-#transform into a dataframe then arrange the windows in ascending order of log score 
-rl_consDf <- as.data.frame(rl_cons)
-rl_consDf <- as.data.frame(rl_consDf%>%arrange(normal))
-rl_consOrderedNorm<- makeGRangesFromDataFrame(rl_consDf, keep.extra.columns = TRUE)
+hg38_rlfs <- as.data.frame(read_tsv("hg38.rlfs.bed",
+                    col_names = c("name", "start", "end","m1","m2", "stand")))#two empty metadata cols?
 
-#get denominator to subset rl_cons by
-lim <- nrow(rl_consDf)
-denominator<- as.integer(lim/10)
+chrom_sizes_hg38 <- read_tsv("data/hg38.chrom.sizes", col_names = FALSE)
 
-low = as.integer(1)
-high = low+denominator
-
-
-#loop metaplots
-for(i in c(1:10)){
-  current<-rl_consOrderedNorm[c(low:high)]
-  tm <- getTagMatrix(current,
-                     windows = promoter
-                     )
+#Calculate enrichment of peaks at RLFS
+perm_test <- function(peaks, cores, genome, rlfs,chrom_sizes) {
   
-  print(plotAvgProf(tm,
-            xlim = c(-3000,3000),
-              xlab = paste(low,"-",low+denominator,sep="")))
-  low<-low+denominator
-  high<- high+denominator
+  peaks <- regioneR::toGRanges(peaks)
+  rlfs <- regioneR::toGRanges(rlfs)
+  # Prevent stranded assignment
+  GenomicRanges::strand(rlfs) <- "*"
+  rlfs <- GenomicRanges::reduce(rlfs)
+  # Mask makes no difference. Turns out R-ChIP is finding genuine R-loops.
+  ##chrom_sizes <- readr::read_tsv(paste0('http://hgdownload.soe.ucsc.edu/goldenPath/',
+  ##                                      genome, '/bigZips/', genome, '.chrom.sizes'),
+  ##                               col_names = FALSE)
+  pt <- regioneR::permTest(A=peaks, B=rlfs, ntimes=150, force.parallel = TRUE, 
+                           genome=as.data.frame(chrom_sizes), mc.cores=cores, allow.overlaps = FALSE,
+                           randomize.function=regioneR::circularRandomizeRegions, 
+                           evaluate.function=regioneR::numOverlaps, alternative = "greater")
+  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 10000, step = 2500) #changed window from 5kbp to 10kbp and step from 50 to 2.5kb
+  
+  show(plot(pt))
+  print(pt)
+  plot(lz)
 }
 
+perm_test(rl_cons,1,"hg38", hg38_rlfs,chrom_sizes_hg38) 
+
+
 ```
-The same trend shown by the first group of metaplots is true for the transformed data as well; lower percent scoring windows tend to be further from the TSS compared to higher percenting scoring windows. 
+```{r}
+lapply(test, perm_test, cores=1, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
+
+```
+-Ran with 150 permutations:
+increase in pecentile -> incease in mean shifted z-score, little variation between all sets of perm_tets. Increase in the difference between observed overlaps an mean overlap of permutations 
 
 ### Peak annotation and upset plots
 
@@ -200,26 +178,13 @@ Following this, I annotated the windows (by the same 10 increment groupings) and
 
 ```{r}
 
-annotateAndUpset <- function(lbound,ubound,rLoopRanges){
-
-    if (length(lbound)!= length(ubound)){
-    print("Upper and lower bound vectors must be the same length!")
-    return(NULL)
-    }
-    
-    for(i in 1:length(lbound)){
-      rl_annotated<- annotatePeak(rLoopRanges[which(rLoopRanges$pct_cons >lbound[i] &          rLoopRanges$pct_cons<ubound[i])], 
-                                       tssRegion=c(-3000, 3000),TxDb=txdb)
+annotateAndUpset <- function(ranges){
+  rl_annotated<- annotatePeak(ranges,tssRegion=c(-3000, 3000),TxDb=txdb)
       show(upsetplot(rl_annotated, vennpie = TRUE))
-    }
-    
 }
 
+lapply(rl_list, annotateAndUpset)
 ```
-```{r}
-annotateAndUpset(lowerbound,upperbound,rl_cons)
-```
-
 
 My hypothesis seems to hold true per the upset plots; higher scoring windows have more peaks which span the 5 relevant regions (introns, exons, promoters, 3' and 5' UTRs), whereas lower scoring peaks have fewer peaks spanning the 5 regions. This divide between higher and lower scoring windows is the same as the meta plots - after a 40% score, there is appears to be a divide in the trends which each group shows. 
 
@@ -230,15 +195,15 @@ Pathway enrichment for the same 10 increment groups are carried out below:
 ```{r, message = FALSE,out.width="150%"}
 
 #OLD
-rl_cons_010_path <- enrichPathway(as.data.frame(rl_cons_010_anno)$geneId)
-rl_cons_1020_path <- enrichPathway(as.data.frame(rl_cons_1020_anno)$geneId)
-rl_cons_2030_path <- enrichPathway(as.data.frame(rl_cons_2030_anno)$geneId)
-rl_cons_3040_path <- enrichPathway(as.data.frame(rl_cons_3040_anno)$geneId)
-rl_cons_4050_path <- enrichPathway(as.data.frame(rl_cons_4050_anno)$geneId)
-rl_cons_5060_path <- enrichPathway(as.data.frame(rl_cons_5060_anno)$geneId)
-rl_cons_6070_path <- enrichPathway(as.data.frame(rl_cons_6070_anno)$geneId)
-rl_cons_7080_path <- enrichPathway(as.data.frame(rl_cons_7080_anno)$geneId)
-rl_cons_80100_path <- enrichPathway(as.data.frame(rl_cons_80100_anno)$geneId)
+# rl_cons_010_path <- enrichPathway(as.data.frame(rl_cons_010_anno)$geneId)
+# rl_cons_1020_path <- enrichPathway(as.data.frame(rl_cons_1020_anno)$geneId)
+# rl_cons_2030_path <- enrichPathway(as.data.frame(rl_cons_2030_anno)$geneId)
+# rl_cons_3040_path <- enrichPathway(as.data.frame(rl_cons_3040_anno)$geneId)
+# rl_cons_4050_path <- enrichPathway(as.data.frame(rl_cons_4050_anno)$geneId)
+# rl_cons_5060_path <- enrichPathway(as.data.frame(rl_cons_5060_anno)$geneId)
+# rl_cons_6070_path <- enrichPathway(as.data.frame(rl_cons_6070_anno)$geneId)
+# rl_cons_7080_path <- enrichPathway(as.data.frame(rl_cons_7080_anno)$geneId)
+#rl_cons_80100_path <- enrichPathway(as.data.frame(rl_cons_80100_anno)$geneId)
 
 #dotplot(rl_cons_010_path,showCategory =20,title = "rl_cons 0-10% pctscore Pathways")
 #dotplot(rl_cons_1020_path,showCategory =20,title = "rl_cons 10-20% pctscore Pathways")
@@ -250,43 +215,43 @@ rl_cons_80100_path <- enrichPathway(as.data.frame(rl_cons_80100_anno)$geneId)
 #dotplot(rl_cons_7080_path,showCategory =20,title = "rl_cons 70-80% pctscore Pathways")
 #dotplot(rl_cons_80100_path,showCategory =20,title = "rl_cons 80-100% pctscore Pathways")
 
-datatable(subset(as.data.frame(rl_cons_010_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 0-10 percent score"),
-            filter = 'top')
-
-datatable(subset(as.data.frame(rl_cons_1020_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 10-20 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_2030_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 20-30 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_3040_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 30-40 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_4050_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 40-50 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_5060_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 50-60 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_6070_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 60-70 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_7080_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 70-80 percent score"),
-            filter = 'top')
-datatable(subset(as.data.frame(rl_cons_80100_path),select = -c(geneID)),
-            rownames = FALSE,
-            caption = paste("pathway enrichment for R-loops: 80-100 percent score"),
-            filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_010_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 0-10 percent score"),
+#             filter = 'top')
+# 
+# datatable(subset(as.data.frame(rl_cons_1020_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 10-20 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_2030_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 20-30 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_3040_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 30-40 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_4050_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 40-50 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_5060_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 50-60 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_6070_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 60-70 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_7080_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 70-80 percent score"),
+#             filter = 'top')
+# datatable(subset(as.data.frame(rl_cons_80100_path),select = -c(geneID)),
+#             rownames = FALSE,
+#             caption = paste("pathway enrichment for R-loops: 80-100 percent score"),
+#             filter = 'top')
 
 ```
 
@@ -302,6 +267,9 @@ As the percent score increases, pathways which are involved transcription and tr
 ### Gene data tables
 Below is the set of data tables storing the genetic information (start, end, width, name and description) for genes contained by each window. Again, windows were separated based on their percent scores.
 ```{r}
+#EDIT:
+#REPEAT FOR TENTHS OF rl_cons
+
 getwd()
 annoData<-toGRanges(txdb)
 
@@ -309,7 +277,7 @@ rl_anno <- annotatePeakInBatch(rl_cons,
                                AnnotationData=annoData, 
                                output="overlapping",
                                bindingRegion=c(-3000, 3000))
-
+#Loss of data here(?)
 rl_anno_2 <- addGeneIDs(rl_anno,
                         "org.Hs.eg.db",
                         IDs2Add = c("symbol","genename"),
@@ -317,11 +285,13 @@ rl_anno_2 <- addGeneIDs(rl_anno,
 
 names(rl_anno_2) = make.names(names(rl_anno_2),unique = TRUE)
 
+rlAnnoList <- split(rl_anno_2, ceiling(rl_anno_2$pct_cons /10))
 
-gene_table<- function(lbound,ubound, rLoopRanges){
-  rl_limited <- rLoopRanges[which(rLoopRanges$pct_cons >lbound & rLoopRanges$pct_cons <ubound )]
-  currentCaption <- paste(lbound,"-",ubound,"% score",sep= "")
-  currentData <- datatable(subset(as.data.frame(rl_limited),select = -c(width,strand,score,peak)),
+
+gene_table<- function(rLoopRanges){
+  
+  currentCaption <- paste(round(min(rLoopRanges$pct_cons)),"-",round(max(rLoopRanges$pct_cons)),"% score",sep= "")
+  currentData <- datatable(subset(as.data.frame(rLoopRanges),select = -c(width,strand,score,peak)),
                             caption = currentCaption,
                             extensions = 'FixedColumns',
                             options = list(
@@ -334,23 +304,34 @@ gene_table<- function(lbound,ubound, rLoopRanges){
   current_file_csv <- paste("gene_datatables/",currentCaption,".csv",sep="")
   
   if(!file.exists(current_file)){
-    export.bed(rl_limited,current_file)
+    export.bed(rLoopRanges,current_file)
   }
   if(!file.exists(current_file_csv)){
-    write.csv(as.data.frame(rl_limited), current_file_csv)
+    write.csv(as.data.frame(rLoopRanges), current_file_csv)
   }
   show(currentData)
   
 }
 
-if(length(upperbound) == length(lowerbound)){
-  for(i in 1:length(upperbound)){
-    gene_table(lowerbound[i], upperbound[i], rl_anno_2)
-  }
-}
+# if(length(upperbound) == length(lowerbound)){
+#   for(i in 1:length(upperbound)){
+#     gene_table(lowerbound[i], upperbound[i], rl_anno_2)
+#   }
+# }
+lapply(rlAnnoList,gene_table)
 
 
+```
+```{r}
+rl_anno_2df <- as.data.frame(rl_anno_2)
+rl_anno_2df <- as.data.frame(rl_anno_2df%>%arrange(pct_cons))
+rl_anno_Ranked<- makeGRangesFromDataFrame(rl_anno_2df, keep.extra.columns = TRUE)
 
+denominator <- length(rl_anno_Ranked)/10
+rlAnnoRankedList<-split(rl_anno_Ranked,ceiling(seq_along(rl_anno_Ranked)/denominator))
+
+
+lapply(rlAnnoRankedList, gene_table)
 ```
 
 ```{r}
@@ -462,7 +443,7 @@ datatable(e5060[e5060$P.value>=0.01 & e5060$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
-40-50% Conservation: 
+40-50% Conservation:
 https://maayanlab.cloud/Enrichr/enrich?dataset=f3ef676d09ac7fd0ee717c2cd6c7f577
 * Percent score 40-50%; very low combined score. Therefore lower Z score; pathways are not significantly enriched compared to the mean rank at this conservation level(?).
 * General trend before this group was a decrease in number of terms which are enriched. 
@@ -513,6 +494,7 @@ e2030<-enriched2030[["ChEA_2016"]]
 #datatable(e[e$P.value<=0.05,])
 datatable(e2030[e2030$P.value>=0.01 & e2030$P.value<=0.05,])
 ```
+
 ```{r}
 rl1020 <- rl_anno_2[which(rl_anno_2$pct_cons >10 & rl_anno_2$pct_cons <20 )]
 rl1020_symbols <- unique(rl1020$symbol)
