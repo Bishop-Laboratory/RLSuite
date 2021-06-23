@@ -452,12 +452,32 @@ e10<-enriched10[["ChEA_2016"]]
 datatable(e10[e10$P.value>=0.01 & e10$P.value<=0.05,])
 ```
 
-10-13% https://maayanlab.cloud/Enrichr/enrich?dataset=f477949203a6a5f8ecc9e36890411a30
-  CFAP97D1 was excluded and in THRA1/BTR, BTR was removed
-13-17% https://maayanlab.cloud/Enrichr/enrich?dataset=c9c50aafd54c4488c2cbd99340e17e53
-17-22% https://maayanlab.cloud/Enrichr/enrich?dataset=344fc2232f1e2d61832f145978e48c71
+```{r}
+dataLst <- list(
+  "10-13% Conservation" = c(rlAnnoRankedList[[1]]$symbol),
+  "13-17% Conservation" = c(rlAnnoRankedList[[2]]$symbol),
+  "17-22% Conservation" = c(rlAnnoRankedList[[3]]$symbol),
+  "22-27% Conservation" = c(rlAnnoRankedList[[4]]$symbol),
+  "27-33% Conservation" = c(rlAnnoRankedList[[5]]$symbol),
+  "33-39% Conservation" = c(rlAnnoRankedList[[6]]$symbol),
+  "39-46% Conservation" = c(rlAnnoRankedList[[7]]$symbol),
+  "46-54% Conservation" = c(rlAnnoRankedList[[8]]$symbol),
+  "54-63% Conservation" = c(rlAnnoRankedList[[9]]$symbol),
+  "63-87% Conservation " = c(rlAnnoRankedList[[10]]$symbol)
 
+)
 
+enrichLinks <- lapply(names(dataLst), function(group) {
+  genes<- dataLst[[group]]
+  response <- httr::POST(url = 'https://maayanlab.cloud/Enrichr/addList', body = list(
+    'list' = paste0(genes, collapse = "\n"),
+    'description' = group
+  ))
+  jsonlite::fromJSON(httr::content(response, as = "text"))
+})
+names(enrichLinks) <- names(dataLst)
+for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
+```
 
 General observations:
 Many of the higher ranking pathways within each conservation group play a role in cell differentation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor supressing or proliferating pathways. 
