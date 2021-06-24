@@ -155,11 +155,11 @@ perm_test <- function(peaks, cores, genome, rlfs,chrom_sizes) {
   ##chrom_sizes <- readr::read_tsv(paste0('http://hgdownload.soe.ucsc.edu/goldenPath/',
   ##                                      genome, '/bigZips/', genome, '.chrom.sizes'),
   ##                               col_names = FALSE)
-  pt <- regioneR::permTest(A=peaks, B=rlfs, ntimes=150, force.parallel = TRUE, 
+  pt <- regioneR::permTest(A=peaks, B=rlfs, ntimes=10000, force.parallel = TRUE, 
                            genome=as.data.frame(chrom_sizes), mc.cores=cores, allow.overlaps = FALSE,
                            randomize.function=regioneR::circularRandomizeRegions, 
                            evaluate.function=regioneR::numOverlaps, alternative = "greater")
-  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 10000, step = 2500) #changed window from 5kbp to 10kbp and step from 50 to 2.5kb
+  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 100000, step = 2500) #changed window from 5kbp to 10kbp and step from 50 to 2.5kb
   
   show(plot(pt))
   print(pt)
