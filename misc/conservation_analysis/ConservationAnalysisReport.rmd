@@ -177,7 +177,11 @@ perm_test <- function(peaks, cores, genome, rlfs,chrom_sizes) {
                            genome=as.data.frame(chrom_sizes), mc.cores=cores, allow.overlaps = FALSE,
                            randomize.function=regioneR::circularRandomizeRegions, 
                            evaluate.function=regioneR::numOverlaps, alternative = "greater")
+<<<<<<< HEAD
   lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 100000, step = 2500) 
+=======
+  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 100000, step = 2500) #changed window from 5kbp to 10kbp and step from 50 to 2.5kb
+>>>>>>> 6a66913589ce4d72c1564b5c7875bd8ea749b1da
   
   show(plot(pt))
   print(pt)
