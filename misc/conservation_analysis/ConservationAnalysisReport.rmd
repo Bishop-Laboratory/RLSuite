@@ -48,7 +48,7 @@ top_ranges <- as.data.frame(rl_cons) %>%
 rl_cons[top_ranges,]  # Top 10 Ranges with the maximum score
 ```
 
-### Metaplot Analysis
+# Metaplot Analysis
 
 I start by creating metaplots for three different groups of windows: the whole set, windows with a percent score greater than 60 and the 12 highest percent scoring windows.
 
@@ -87,22 +87,42 @@ After creating the returnTagMatrix function (for better readability), I repeat t
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
 #exclude windows with a percent score less than 10
 rl_cons <- rl_cons[which(rl_cons$pct_cons >=  10)]
+
+splitVia <- function(peaks, percent, mode){
+  #function takes:
+    #GRanges object with percent conservation, 
+    #percent interval to split on,
+    #mode (either percent "interval" or "strata")
+  #return a GRanges list 
+  if(percent == 0){return("Must pass an integer greater than 0")}
+  
+  if(mode == "interval"){ 
+    #if user chooses interval, split peaks according to percent intervals
+    return (split(peaks, ceiling(peaks$pct_cons/percent)))
+  } else if (mode == "strata"){
+    #Otherwise, if user chooses strata, split according to number of strata requested -- percent
+    lim <- length(peaks)
+    denominator <- as.integer(lim/percent)
+    return(split(peaks,ceiling(seq_along(peaks)/denominator)))
+  }
+  
+}
+
 #create a granges list by splitting according to 10 percent intervals
-rl_list<-split(rl_cons, ceiling(rl_cons$pct_cons /10))
+rl_list<-splitVia(rl_cons, 10, "interval")
 
 returnTagMatrix<-function(peaks){
+  #function takes a GRanges list and plots distribution of each GRanges object around a TSS
   tm <- getTagMatrix(peaks,
                      windows = promoter
                      )
 
-  print(plotAvgProf(tm,
+  plotAvgProf(tm,
             xlim = c(-3000,3000),
-              xlab = paste(min(peaks$pct_cons),"-",max(peaks$pct_cons),"%",sep="")))
-  print(min(peaks$pct_cons))
+            xlab = paste(min(peaks$pct_cons),"-",max(peaks$pct_cons),"%",sep=""))
 }
 
-lowerbound <- c(10,20,30,40,50,60,70,80)
-upperbound <- c(20,30,40,50,60,70,80,100)
+
 lapply(rl_list,returnTagMatrix)
 ```
 X labels describe the range of percent score of each plot.
@@ -115,23 +135,21 @@ Following this, the whole set of windows were ranked in ascending order of perce
 
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
-#rank windows according to percent score
-rl_consDf <- as.data.frame(rl_cons)
-rl_consDf <- as.data.frame(rl_consDf%>%arrange(pct_cons))
-rl_consRanked<- makeGRangesFromDataFrame(rl_consDf, keep.extra.columns = TRUE)
+rankWindows <- function(peaks){
+  #function takes a GRanges object with percent conservation
+  #returns the GRanges object, ranked according to percent score
+  peaksDF <- as.data.frame(peaks)
+  return(makeGRangesFromDataFrame(peaksDF%>%arrange(pct_cons), keep.extra.columns = TRUE))
+}
 
-#creating Granges list to divide rl_cons
-lim <- nrow(rl_consDf)
-#divide rl_consRanked by tenths 
-denominator<- as.integer(lim/10)
-test<-split(rl_consRanked,ceiling(seq_along(rl_consRanked)/denominator))
+test<-splitVia(rankWindows(rl_cons),10,"strata")
 
 #generate metaplots
 lapply(test[1:10],returnTagMatrix)
 
 ```
 
-The same trend shown by the first group of metaplots is true for the transformed data as well; lower percent scoring windows tend to be further from the TSS compared to higher percenting scoring windows. However, a large portion of the wohle set of windows are located hundreds of basepairs from a TSS. This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs). And given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a decrepency between higher and lower scoring windows in their relationship to RLFRs.
+The same trend shown by the first group of metaplots is true for the transformed data as well; lower percent scoring windows tend to be further from the TSS compared to higher percenting scoring windows. However, a large portion of the whole set of windows are located hundreds of basepairs from a TSS. This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs). And given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a decrepency between higher and lower scoring windows in their relationship to RLFRs.
 
 The explore this question, a permutation test over rl_cons is run against a region set describing r-loop forming regions. This was done first on the whole set of windows,
 
@@ -155,25 +173,25 @@ perm_test <- function(peaks, cores, genome, rlfs,chrom_sizes) {
   ##chrom_sizes <- readr::read_tsv(paste0('http://hgdownload.soe.ucsc.edu/goldenPath/',
   ##                                      genome, '/bigZips/', genome, '.chrom.sizes'),
   ##                               col_names = FALSE)
-  pt <- regioneR::permTest(A=peaks, B=rlfs, ntimes=150, force.parallel = TRUE, 
+  pt <- regioneR::permTest(A=peaks, B=rlfs, ntimes=10000, force.parallel = TRUE, 
                            genome=as.data.frame(chrom_sizes), mc.cores=cores, allow.overlaps = FALSE,
                            randomize.function=regioneR::circularRandomizeRegions, 
                            evaluate.function=regioneR::numOverlaps, alternative = "greater")
-  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 10000, step = 2500) #changed window from 5kbp to 10kbp and step from 50 to 2.5kb
+  lz <- regioneR::localZScore(pt=pt, A=peaks, B=rlfs, window = 100000, step = 2500) 
   
   show(plot(pt))
   print(pt)
   plot(lz)
 }
 
-perm_test(rl_cons,1,"hg38", hg38_rlfs,chrom_sizes_hg38) 
+perm_test(rl_cons,2,"hg38", hg38_rlfs,chrom_sizes_hg38) 
 
 
 ```
 
 as well as each tenth.
 ```{r,echo=FALSE, fig.show="hold", out.width="50%", message=FALSE, warning=FALSE}
-lapply(test, perm_test, cores=1, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
+lapply(test, perm_test, cores=4, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
 
 ```
 In reviewing the results of the test for rl_cons it can no longer be assumed that there is no relationship between the whole set of windows and r-loop forming regions (given a significance threshold of 0.05). The same can also be said for each tenth in the ranked set.
@@ -182,15 +200,17 @@ The z score tends to increase with the percent score of each tenth.
 
 Local z score across all tenths remains relatively flat, suggesting a regional relationship between rl_cons and the r-loop forming regions. This may be due to the windows being relatively large(10kb). 
 
-### Peak annotation and upset plots
+# Peak annotation and upset plots
 
 Following this, I annotated the windows (by the same 10 increment groupings) and used upset plots to display the data. From our understanding of R-loops, I would expect that higher scoring windows would have a greater amount of peaks which span all of 3' and 5' untranslated regions (UTR), promoter, exons and introns. Lower scoring groups would have most peaks overlapping 1 or two of these regions. 
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
+library(ggupset)
 
 annotateAndUpset <- function(ranges){
+  #function takes GRanges list and generates upset plots for each object in the list
   rl_annotated<- annotatePeak(ranges,tssRegion=c(-3000, 3000),TxDb=txdb)
-      show(upsetplot(rl_annotated, vennpie = TRUE))
+      upsetplot(rl_annotated, vennpie = TRUE)
 }
 
 #return an upset plot for each percent score group 
@@ -202,29 +222,30 @@ My hypothesis seems to hold true per the upset plots; higher scoring windows hav
 ### Gene data tables
 Below is the set of data tables storing the genetic information (start, end, width, name and description) for genes contained by each window. Again, windows were separated based on their percent scores.
 ```{r, echo=FALSE}
-#EDIT:
-#REPEAT FOR TENTHS OF rl_cons
 
-getwd()
-annoData<-toGRanges(txdb)
-
-rl_anno <- annotatePeakInBatch(rl_cons, 
-                               AnnotationData=annoData, 
+addGenes <- function(annoData, peaks){
+  #function takes a txdb object and GRanges object
+  #returns the GRanges object with gene Ids added
+  peak_anno <- annotatePeakInBatch(peaks, 
+                               AnnotationData=toGRanges(annoData), 
                                output="overlapping",
                                bindingRegion=c(-3000, 3000))
-#Loss of data here(?)
-rl_anno_2 <- addGeneIDs(rl_anno,
+  peak_anno_2 <- addGeneIDs(peak_anno,
                         "org.Hs.eg.db",
                         IDs2Add = c("symbol","genename"),
                         feature_id_type = "entrez_id")
+  names(peak_anno_2) = make.names(names(rl_anno_2), unique = TRUE)
+  return(peak_anno_2)
+}
 
-names(rl_anno_2) = make.names(names(rl_anno_2),unique = TRUE)
-
-rlAnnoList <- split(rl_anno_2, ceiling(rl_anno_2$pct_cons /10))
+rl_withGenes <- addGenes(txdb, rl_cons)
+rlAnnoList <- splitVia(rl_withGenes, 10, "interval")
 
 
 gene_table<- function(rLoopRanges){
   
+  #function takes GRanges object and generates a datatable,
+  #uncomment the block of code below to generate csv and bed file of rLoopRanges
   currentCaption <- paste(round(min(rLoopRanges$pct_cons)),"-",round(max(rLoopRanges$pct_cons)),"% score",sep= "")
   currentData <- datatable(subset(as.data.frame(rLoopRanges),select = -c(width,strand,score,peak)),
                             caption = currentCaption,
@@ -249,11 +270,6 @@ gene_table<- function(rLoopRanges){
   
 }
 
-# if(length(upperbound) == length(lowerbound)){
-#   for(i in 1:length(upperbound)){
-#     gene_table(lowerbound[i], upperbound[i], rl_anno_2)
-#   }
-# }
 lapply(rlAnnoList,gene_table)
 
 
@@ -261,15 +277,9 @@ lapply(rlAnnoList,gene_table)
 
 Gene data tables of the tenths using the same methods:
 ```{r echo=FALSE}
-#take annoated windows and rank them according to percent score
-rl_anno_2df <- as.data.frame(rl_anno_2)
-rl_anno_2df <- as.data.frame(rl_anno_2df%>%arrange(pct_cons))
-rl_anno_Ranked<- makeGRangesFromDataFrame(rl_anno_2df, keep.extra.columns = TRUE)
 
-#create granges list by splitting ranked annotate windows into tenths 
-denominator <- length(rl_anno_Ranked)/10
-rlAnnoRankedList<-split(rl_anno_Ranked,ceiling(seq_along(rl_anno_Ranked)/denominator))
-
+#take annotated windows and rank them according to percent score, them split into 10 strata
+rlAnnoRankedList<- splitVia(rankWindows(rl_withGenes),10,"strata")
 
 lapply(rlAnnoRankedList, gene_table)
 ```
@@ -284,7 +294,7 @@ if(is.null(listEnrichrDbs()))
   websiteLive<-FALSE
 ```
 
-### Enrichment analysis 
+# Enrichment analysis {.tabset}
 Below is an enrichment analysis of some percent scoring groups. For each analysis I use the following work flow; a P.value threshold x (0.01<=x<=0.05) was used, then the set of terms were sorted in decending order [5][6].
 
 For the 80-100% scoring group, I first began by comparing its gene set to the ChEA database. 
@@ -294,7 +304,7 @@ For the 80-100% scoring group, I first began by comparing its gene set to the Ch
 
 Breakdown of top 5(human cell lines only):
 
-80-100% Conservation:
+## 80-100% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=ae2bceb7fa582a59a487f4a25e3f2157
 * IKZF1/HCT116 - Regulator of lymphoctye differentiation; colorectal cancer
 * KDM5A/BREAST - Gene regulation via histone demethylation[10];
@@ -319,7 +329,7 @@ datatable(e80100[e80100$P.value>=0.01 & e80100$P.value<=0.05,],
 
 ```
 
-70-80% Conservation:
+## 70-80% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=79c154d7f327e99466fcf36bb1b59a39
 * ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
 * PKCTHETA/BREAST - Activation of mature T cells [15]; 
@@ -342,7 +352,7 @@ datatable(e7080[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
 
 ```
 
-60-70% Conservation:
+## 60-70% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=5ee5a9c14b529497c6dda82f4a953f18
 * EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
 * ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
@@ -363,8 +373,9 @@ datatable(e6070[e6070$P.value>=0.01 & e6070$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
-50-60% Conservation (unordered ranking):
+## 50-60% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=241b3fb3a27245fc21eea20ca0626605
+Unorderdered rankings
 * ELF3/PDAC-Cell line - Associated with Sarcoma, Synovial and Ampulla of Vater Cancer [22]; Pancreatic Ductal adenocarcinoma
 * KLF4/PDAC-Cell line - Mediates p53(tumor supressor) gene, thereby controlling G1-to-S cell cycle transition after Dna damage[23];Pancreatic Ductal adenocarcinoma
 * EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
@@ -383,7 +394,7 @@ datatable(e5060[e5060$P.value>=0.01 & e5060$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
-40-50% Conservation:
+## 40-50% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=f3ef676d09ac7fd0ee717c2cd6c7f577
 * Percent score 40-50%; very low combined score. Therefore lower Z score; pathways are not significantly enriched compared to the mean rank at this conservation level(?).
 * General trend before this group was a decrease in number of terms which are enriched. 
@@ -406,7 +417,7 @@ datatable(e4050[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
-30-40% Conservation:
+## 30-40% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=3ea142080e4a4d7c3de3d0d4f5d9e3b9
 - E2F7/HELA - Cell cycle progression[31]; cancerous-cervical epithelial
 - FOXM1/OE33 and U2OS - Implicated in DNA drepair, senscence, and tumor proliferation[30]; Human esophagus and Epithelial bone Osteosarcoma (respectively)
@@ -424,7 +435,7 @@ datatable(e3040[e3040$P.value>=0.01 & e3040$P.value<=0.05,],
           scrollCollapse = TRUE))
 ```
 
-20-30% Conservation:
+## 20-30% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=0ccdc80016e7b3d65a0f3b3af2cfbea7
 ```{r,message=FALSE}
 rl2030 <- rl_anno_2[which(rl_anno_2$pct_cons >20 & rl_anno_2$pct_cons <30 )]
@@ -479,11 +490,11 @@ names(enrichLinks) <- names(dataLst)
 for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
 
-General observations:
+# General observations:
 Many of the higher ranking pathways within each conservation group play a role in cell differentation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor supressing or proliferating pathways. 
 A trend within the overall data set is that there is a decrease in the number of enriched pathways as percent score decreases - with the exception of the 40-50% group and the groups with less than 30% conservation. For the former, there are no enriched pathways. Perhaps there is a correlation between the enrichment of transcription factors and their closeness to a TSS (see Metaplot analysis for <30% conseration groups).
 
-### Discussion/Conclusion
+# Discussion/Conclusion
 Using the percent score as a metric for what is a highly conserved R loop prooves to be an effective tool which aligns with what we currently know about Rloops. Windows with higher percent scores are more likely to share characteristics which are expected of Rloop regions. High percent scoring windows are more likely to be closer to the TSS of gene and still have a notable presence surrounding it. Conversely, lower percent scoring windows have little presence near the TSS.
   Upset plots show a similar distinction between lower percent scoring windows and high percent scoring windows; as the percent score increases there is a greater presence of peaks which overlap whole genes. This is expected as the region which Rloops span may overlap large portions of a gene on a template strand. 
   Finally, we see that pathwys which are implicated in Rloop formation - such as the M phase and transcription and translational roles - are more present in windows with higher percent scores. 
