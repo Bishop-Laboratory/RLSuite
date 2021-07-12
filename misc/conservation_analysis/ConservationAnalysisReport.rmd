@@ -153,7 +153,7 @@ The same trend shown by the first group of metaplots is true for the transformed
 
 The explore this question, a permutation test over rl_cons is run against a region set describing r-loop forming regions. This was done first on the whole set of windows,
 
-```{r,echo=FALSE, fig.show="hold", message=FALSE, warning=FALSE}
+```{r,echo=FALSE, fig.show="hold", message=FALSE, warning=FALSE, cache=TRUE}
 #library(regioneR)
 
 hg38_rlfs <- as.data.frame(read_tsv("hg38.rlfs.bed",
@@ -189,7 +189,7 @@ perm_test(rl_cons,2,"hg38", hg38_rlfs,chrom_sizes_hg38)
 ```
 
 as well as each tenth.
-```{r,echo=FALSE, fig.show="hold", out.width="50%", message=FALSE, warning=FALSE}
+```{r,echo=FALSE, fig.show="hold", out.width="50%", message=FALSE, warning=FALSE, cache=TRUE}
 lapply(test, perm_test, cores=4, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
 
 ```
@@ -233,7 +233,7 @@ addGenes <- function(annoData, peaks){
                         "org.Hs.eg.db",
                         IDs2Add = c("symbol","genename"),
                         feature_id_type = "entrez_id")
-  names(peak_anno_2) = make.names(names(rl_anno_2), unique = TRUE)
+  names(peak_anno_2) = make.names(names(peak_anno_2), unique = TRUE)
   return(peak_anno_2)
 }
 
@@ -313,7 +313,7 @@ https://maayanlab.cloud/Enrichr/enrich?dataset=ae2bceb7fa582a59a487f4a25e3f2157
 
 ```{r,message=FALSE}
 
-rl80100 <- rl_anno_2[which(rl_anno_2$pct_cons >80 & rl_anno_2$pct_cons <100 )]
+rl80100 <- rl_withGenes[which(rl_withGenes$pct_cons >80 & rl_withGenes$pct_cons <100 )]
 rl80100_symbols <- unique(rl80100$symbol)
 enriched80100 <- enrichr(rl80100_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e80100<-enriched80100[["ChEA_2016"]]
@@ -337,7 +337,7 @@ https://maayanlab.cloud/Enrichr/enrich?dataset=79c154d7f327e99466fcf36bb1b59a39
 * CREB1/LNCaP-abl - Induces transcription of genes in reponse to hormonal stimulation of cAMP pathway[18]; Prostate carcinoma 
 ```{r,message=FALSE}
 
-rl7080 <- rl_anno_2[which(rl_anno_2$pct_cons >70 & rl_anno_2$pct_cons <80 )]
+rl7080 <- rl_withGenes[which(rl_withGenes$pct_cons >70 & rl_withGenes$pct_cons <80 )]
 rl7080_symbols <- unique(rl7080$symbol)
 enriched7080 <- enrichr(rl7080_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e7080<-enriched7080[["ChEA_2016"]]
@@ -359,7 +359,7 @@ https://maayanlab.cloud/Enrichr/enrich?dataset=5ee5a9c14b529497c6dda82f4a953f18
 * TP53/ IMR90 - Enducing cell cycle arrest, apoptosis, senescence and DNA repair in response to cellular stress[21];Lung fibroblast - normal
 * PKCTHETA/BREAST - - Activation of mature T cells [15];
 ```{r,message=FALSE}
-rl6070 <- rl_anno_2[which(rl_anno_2$pct_cons >60 & rl_anno_2$pct_cons <70 )]
+rl6070 <- rl_withGenes[which(rl_withGenes$pct_cons >60 & rl_withGenes$pct_cons <70 )]
 rl6070_symbols <- unique(rl6070$symbol)
 enriched6070 <- enrichr(rl6070_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e6070<-enriched6070[["ChEA_2016"]]
@@ -380,7 +380,7 @@ Unorderdered rankings
 * EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
 * NR1H3/ AtherOSCLEROTIC-FOAM - Family members are regulators of macrophage function (controlling transcriptional programs involved in lipid homeostasis and inflammation) [24]; "Lipid filled" macrophages
 ```{r,message=FALSE}
-rl5060 <- rl_anno_2[which(rl_anno_2$pct_cons >50 & rl_anno_2$pct_cons <60 )]
+rl5060 <- rl_withGenes[which(rl_withGenes$pct_cons >50 & rl_withGenes$pct_cons <60 )]
 rl5060_symbols <- unique(rl5060$symbol)
 enriched5060 <- enrichr(rl5060_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e5060<-enriched5060[["ChEA_2016"]]
@@ -403,7 +403,7 @@ https://maayanlab.cloud/Enrichr/enrich?dataset=f3ef676d09ac7fd0ee717c2cd6c7f577
 * MYC/BL - Proto-oncogene, dimerizes and complexes with TF MAX to regulate transcription of target genes[11]; Burkitt lymphoma 
 * SA1/ ERYTHROID - Encodes a compoment of cohesin(under the alias STAG1) [28];
 ```{r,message=FALSE}
-rl4050 <- rl_anno_2[which(rl_anno_2$pct_cons >40 & rl_anno_2$pct_cons <50 )]
+rl4050 <- rl_withGenes[which(rl_withGenes$pct_cons >40 & rl_withGenes$pct_cons <50 )]
 rl4050_symbols <- unique(rl4050$symbol)
 enriched4050 <- enrichr(rl4050_symbols, c("ChEA_2016"))
 e4050<-enriched4050[["ChEA_2016"]]
@@ -421,7 +421,7 @@ https://maayanlab.cloud/Enrichr/enrich?dataset=3ea142080e4a4d7c3de3d0d4f5d9e3b9
 - E2F7/HELA - Cell cycle progression[31]; cancerous-cervical epithelial
 - FOXM1/OE33 and U2OS - Implicated in DNA drepair, senscence, and tumor proliferation[30]; Human esophagus and Epithelial bone Osteosarcoma (respectively)
 ```{r,message=FALSE}
-rl3040 <- rl_anno_2[which(rl_anno_2$pct_cons >30 & rl_anno_2$pct_cons <40 )]
+rl3040 <- rl_withGenes[which(rl_withGenes$pct_cons >30 & rl_withGenes$pct_cons <40 )]
 rl3040_symbols <- unique(rl3040$symbol)
 enriched3040 <- enrichr(rl3040_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e3040<-enriched3040[["ChEA_2016"]]
@@ -437,7 +437,7 @@ datatable(e3040[e3040$P.value>=0.01 & e3040$P.value<=0.05,],
 ## 20-30% Conservation
 https://maayanlab.cloud/Enrichr/enrich?dataset=0ccdc80016e7b3d65a0f3b3af2cfbea7
 ```{r,message=FALSE}
-rl2030 <- rl_anno_2[which(rl_anno_2$pct_cons >20 & rl_anno_2$pct_cons <30 )]
+rl2030 <- rl_withGenes[which(rl_withGenes$pct_cons >20 & rl_withGenes$pct_cons <30 )]
 rl2030_symbols <- unique(rl2030$symbol)
 enriched2030 <- enrichr(rl2030_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e2030<-enriched2030[["ChEA_2016"]]
@@ -446,7 +446,7 @@ datatable(e2030[e2030$P.value>=0.01 & e2030$P.value<=0.05,])
 ```
 
 ```{r}
-rl1020 <- rl_anno_2[which(rl_anno_2$pct_cons >10 & rl_anno_2$pct_cons <20 )]
+rl1020 <- rl_withGenes[which(rl_withGenes$pct_cons >10 & rl_withGenes$pct_cons <20 )]
 rl1020_symbols <- unique(rl1020$symbol)
 enriched1020 <- enrichr(rl1020_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e1020<-enriched1020[["ChEA_2016"]]
@@ -454,7 +454,7 @@ e1020<-enriched1020[["ChEA_2016"]]
 datatable(e1020[e1020$P.value>=0.01 & e1020$P.value<=0.05,])
 ```
 ```{r}
-rl10 <- rl_anno_2[which(rl_anno_2$pct_cons <10 )]
+rl10 <- rl_withGenes[which(rl_withGenes$pct_cons <10 )]
 rl10_symbols <- unique(rl10$symbol)
 enriched10 <- enrichr(rl10_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
 e10<-enriched10[["ChEA_2016"]]
@@ -488,6 +488,7 @@ enrichLinks <- lapply(names(dataLst), function(group) {
 names(enrichLinks) <- names(dataLst)
 for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
+
 
 # General observations:
 Many of the higher ranking pathways within each conservation group play a role in cell differentation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor supressing or proliferating pathways. 
