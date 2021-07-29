@@ -15,6 +15,7 @@ jobs:
     name: Mamba install
     runs-on: "ubuntu-latest"
     steps:
+      #- uses: docker://pandoc/core:2.9
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
         with:
@@ -32,4 +33,6 @@ jobs:
           conda config --show
           printenv | sort
       - shell: bash -l {0}
-        run: mamba install jupyterlab
+        run: |
+          mamba install rstudio
+          R -e "setwd('misc/eda'); rmarkdown::render('eda.Rmd', params = list(file = 'misc/rmap_full_11_25.csv'))"
