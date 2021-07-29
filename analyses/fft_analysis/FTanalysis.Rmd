@@ -1,0 +1,141 @@
+---
+title: "RSeq - Fourier Analysis"
+author: "Daniel Montemayor<br><small>Center for Renal Precision Medicine<br>University of Texas Health San Antonio School of Medicine</small>"
+date: "<small>`r Sys.Date()`</small>"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: true
+    toc_float: 
+      collapsed: false
+    code_folding: hide
+    theme: cerulean
+---
+
+![Center for Renal Precision Medicine](https://dmontemayor.github.io/assets/Long_SOM/horizontal/JPG/UTHSA_Long-SOM_H_CMYK.jpg)
+
+```{r requirements, message=FALSE, warning=FALSE}
+#Requirements
+requirements <- c("devtools", "remotes", "getPass", "stats", "binhf")
+
+#CRAN repository
+repos <- "http://cran.us.r-project.org"
+
+#install and load missing requirements
+for (pack in requirements){
+  if( !is.element(pack, .packages(all.available = TRUE)) ) {
+    install.packages(pack)
+  }
+  library(pack, character.only = TRUE)
+}
+
+##uncomment this block of code to install RSeqR with git personal access token
+##install RSeqR with git PAtoken
+#if (! require("RSeqR")){
+#  try(remotes::install_github("Bishop-Laboratory/RSeqR", dependencies = "Imports",
+#                              force = TRUE,
+#                              auth_token = getPass(msg = "Enter git personal access token: ")))
+#  require("RSeqR") #use require to give warning if try failed and avoid error
+#}
+#
+##assert RSeqR is loaded
+#if (! "package:RSeqR" %in% search()){
+#  #throw error and exit
+#  stop("RSeqR package is not installed. Do you have a git personal access token?")
+#}
+```
+
+```{r globals}
+#Declare number of modes for lpf
+n <- 3
+```
+
+
+```{r lpf}
+#define lowpass filter
+lpf <- function(Z, n){
+  #FT
+  W<-fft(Z)
+  #logW<-log(Re(W*Conj(W)))
+  
+  # accept n strongest modes
+  #W[rank(-logW,)>n] <- 0
+  
+  #accept n lowest frequency modes
+  W[(n+1):length(W)] <- 0
+  
+  return(Re(fft(W, inverse = TRUE)))
+}
+```
+
+
+
+```{r load}
+#get package data Zscores
+#Z <- RSeqR::SRX1025890$rlfs_data[[2]]$`regioneR::numOverlaps`$shifted.z.scores
+#Can also load data_list downloaded from BOX
+Z <- data_list$rlfs_data[[2]]$`regioneR::numOverlaps`$shifted.z.scores
+```
+
+```{r}
+Zlp <-lpf(Z, 5)
+
+plot(Z)
+plot(Zlp)
+```
+
+
+
+```{r transformations}
+#shift
+#Z <- shift(Z, length(Z)/2)
+
+#compute autocorrelation
+Zacf <- acf(Z, lag.max = length(Z)/1, plot = FALSE)
+Zacf <- drop(Zacf$acf) 
+
+#low pass filter
+#W <- lpf(Z,n)
+#plot LPF zscores 
+#plot(W)
+
+#compute FT on zscore and its autocorrelation
+W<-fft(Z)
+Wacf <- fft(Zacf)
+```
+
+```{r plots}
+#plot zscores
+plot(Z)
+
+
+#plot Zscore auto-correlation
+plot(Zacf)
+#plot Wscore sine component
+plot(-Im(W))
+#plot FT(acf) cosine component
+plot(Re(Wacf))
+#plot FT(acf) sine component
+plot(-Im(Wacf))
+#plot FT(acf) angluar component
+plot(sqrt(Re(Wacf*Conj(Wacf))))
+```
+
+```{r integration}
+#Niquist Limit
+L=length(Z)/2
+
+#compute integral of sine component
+sum(-Im(W[1:L]), na.rm = TRUE)
+#compute integral of magnitude of autocorrelation function
+sum(abs(Zacf))
+```
+
+
+```{r normality_test}
+#calculate Normality score
+qqnorm(Z)
+qqline(Z)
+try(shapiro.test(Z))
+```
