@@ -1,5 +1,3 @@
-setwd("C:\\Users\\annaj\\OneDrive - University of Bristol\\Extracurricular\\UTSA")
-
 library(tidyverse)
 library(EnsDb.Hsapiens.v86)
 library(AnnotationDbi)
@@ -34,7 +32,7 @@ head(RLAnno)
 
 rloops <- data.frame(SYMBOL = RLAnno$SYMBOL, RLOOP_PILEUP = RLAnno$pileup)
 
-rloops <- rloops %>% group_by(SYMBOL) %>% summarise(RLoop_Pileup=n()) %>% drop_na()
+rloops <- rloops %>% group_by(SYMBOL) %>% summarise(RLoop_Pileup_Mean=mean(RLOOP_PILEUP)) 
 
 df <- left_join(df, rloops)
 
