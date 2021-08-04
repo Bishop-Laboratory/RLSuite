@@ -9,8 +9,6 @@ load("geneTPM_and_RLAnno.rda")
 
 # summarising then mapping transcripts to genes --------------------------------------------
 
-head(geneTPM)
-
 #put names into standard TXID format
 geneTPM$TXID <- gsub("\\..*","", geneTPM$Name) 
 
@@ -28,14 +26,13 @@ df <- as.data.frame(left_join(df, anno)) %>% dplyr::select(c(SYMBOL, TPM)) %>% g
 
 # R loop wrangling --------------------------------------------------------
 
-head(RLAnno)
-
+#create rloops df from example data using SYMBOL and pileup 
 rloops <- data.frame(SYMBOL = RLAnno$SYMBOL, RLOOP_PILEUP = RLAnno$pileup)
 
+#groupby SYMBOL & summarise, returning mean of pileup values linked to each symbol) 
 rloops <- rloops %>% group_by(SYMBOL) %>% summarise(RLoop_Pileup_Mean=mean(RLOOP_PILEUP)) 
 
+#merge rloops with df, creating df with symbol, tpm & pileup mean columns 
 df <- left_join(df, rloops)
 
-head(df)
 
-df2['TPM','ABCA2']
