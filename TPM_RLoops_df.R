@@ -16,15 +16,16 @@ head(geneTPM)
 #put names into standard TXID format
 geneTPM$TXID <- gsub("\\..*","", geneTPM$Name) 
 
-#summarise at gene level
-df <- geneTPM %>% dplyr::select(c(TXID, TPM)) %>% group_by(TXID)
+#create df of TXID & TPM
+df <- geneTPM %>% dplyr::select(c(TXID, TPM))
 
 #find corresponding symbols for TXIDs
 anno <- AnnotationDbi::select(EnsDb.Hsapiens.v86, keys = df$TXID, columns = c("TXID", "SYMBOL"),
                               keytype = "TXID")
 
-#create dataframe of symbols and TPM
-df <- as.data.frame(left_join(df, anno)) %>% dplyr::select(c(SYMBOL, TPM))
+#create dataframe of symbols and TPM, summarising to gene level
+df <- as.data.frame(left_join(df, anno)) %>% dplyr::select(c(SYMBOL, TPM)) %>% group_by(SYMBOL) %>% summarise(TPM = sum(TPM))
+
 
 
 # R loop wrangling --------------------------------------------------------
@@ -39,3 +40,4 @@ df <- left_join(df, rloops)
 
 head(df)
 
+df2['TPM','ABCA2']
