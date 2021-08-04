@@ -1,36 +1,30 @@
+setwd("C:\\Users\\annaj\\OneDrive - University of Bristol\\Extracurricular\\UTSA")
+
 library(tidyverse)
 library(EnsDb.Hsapiens.v86)
 library(AnnotationDbi)
 
 
 load("geneTPM_and_RLAnno.rda")
-#imports geneTPM and RLAnno
+#imports geneTPM and RLAnno data
 
 
-# summing tpm to gene level  ----------------------------------------------
+# summarising then mapping transcripts to genes --------------------------------------------
 
 head(geneTPM)
 
+#put names into standard TXID format
 geneTPM$TXID <- gsub("\\..*","", geneTPM$Name) 
 
-sumtpm <- geneTPM %>% dplyr::select(c(TXID, TPM)) %>% group_by(TXID) %>% summarise(TPM=n())
+#summarise at gene level
+df <- geneTPM %>% dplyr::select(c(TXID, TPM)) %>% group_by(TXID)
 
-head(sumtpm)
-
-#don't need to summarise at the transcript level - should do this after mapping transcripts to genes 
-
-# mapping transcripts to genes --------------------------------------------
-
-
-
-anno <- AnnotationDbi::select(EnsDb.Hsapiens.v86, keys = sumtpm$TXID, columns = c("TXID", "SYMBOL"),
+#find corresponding symbols for TXIDs
+anno <- AnnotationDbi::select(EnsDb.Hsapiens.v86, keys = df$TXID, columns = c("TXID", "SYMBOL"),
                               keytype = "TXID")
 
-
-
-df <- left_join(df, sumtpm) %>% dplyr::select(c(SYMBOL, TPM))
-
-head(df)
+#create dataframe of symbols and TPM
+df <- as.data.frame(left_join(df, anno)) %>% dplyr::select(c(SYMBOL, TPM))
 
 
 # R loop wrangling --------------------------------------------------------
