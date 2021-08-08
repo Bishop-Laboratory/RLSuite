@@ -12,15 +12,23 @@ load("misc/available_genomes.rda")
 bad_acc <- paste0("GSM37343", 14:21)
 accessions <- accessions[! accessions %in% bad_acc]
 
-
+require(reutils)
 mapping <- get_public_run_info(accessions, available_genomes = available_genomes)
 new_dataset <- mapping %>%
-  select(GSM = accessions_original, study = condition) %>%
+  dplyr::select(GSM = accessions_original, study = condition) %>%
   full_join(dataset, by = c("GSM")) %>%
   mutate(study = case_when(
-    GSM %in% bad_acc ~ "GSE130242"
+    GSM %in% bad_acc ~ "GSE130242",
+    TRUE ~ study
   )) %>%
   write_csv("analyses/rmap_full_11_25_with_study.csv")
+
+
+
+
+
+
+
 
 
 

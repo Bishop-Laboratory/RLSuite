@@ -3,7 +3,6 @@
 #' @importFrom magrittr %>%
 #' @import rlang
 makeGenes <- function() {
-  
   EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86 %>%
     AnnotationDbi::select(
       keys = AnnotationDbi::keys(.), 
