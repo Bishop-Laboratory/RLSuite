@@ -13,8 +13,10 @@ makeGenomicFeatures <- function() {
         seqnames, ":", start, "-", end, ":", strand
       )
     ) %>%
+    dplyr::mutate(id = gsub(id, pattern = ":", replacement = "__")) %>%
+    dplyr::mutate(id = gsub(id, pattern = "^([0-9]{1}.+)", replacement = "X\\1")) %>%
     dplyr::select(
-      id, type, source=tx_id, location
+      id, type, location
     )
 }
 
@@ -26,6 +28,6 @@ if (interactive()) {
   require(magrittr)
   
   readr::write_csv(makeGenomicFeatures(), file = GENOMIC_FEATURES)
-  system(paste0("xz ", GENOMIC_FEATURES))  # xzip
+  system(paste0("xz -f ", GENOMIC_FEATURES))  # xzip
   
 }
