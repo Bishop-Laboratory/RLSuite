@@ -3,6 +3,7 @@
 #' @importFrom magrittr %>%
 #' @import rlang
 makeRLoopSignal <- function(RLOOPS, RLOOP_SIGNAL_MAT) {
+  
   # Get RLoops
   rloops <- RLOOPS %>% csvToGR() %>%
     as.data.frame() %>%
@@ -26,7 +27,7 @@ makeRLoopSignal <- function(RLOOPS, RLOOP_SIGNAL_MAT) {
 }
 
 
-if (sys.nframe() == 0L | TRUE) {
+if (sys.nframe() == 0L) {
   require(rlang)
   require(magrittr)
   source("analyses/Prepare-RMapDB-Tables/GeneRLoopOverlap_GenFeatRLoopOverlap/gene_rl_overlap__gf_rl_overlap.R")
