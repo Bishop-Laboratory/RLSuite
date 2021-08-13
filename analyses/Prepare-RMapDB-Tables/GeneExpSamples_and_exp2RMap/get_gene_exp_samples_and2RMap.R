@@ -91,4 +91,5 @@ if (sys.nframe() == 0L) {
   message("Compress")
   system(paste0("xz -f ", GENE_EXP_SAMPLES))  
   system(paste0("xz -f ", GENE_EXP_2_RMAP_SAMPLES))  
+  
 }

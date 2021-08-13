@@ -63,3 +63,12 @@ analyses/Prepare-RMapDB-Tables/**/*_cache/
 *.narrowPeak
 *.sizes
 
+analyses/Prepare-RMapDB-Tables/**/sras/*
+analyses/Prepare-RMapDB-Tables/**/QC/*
+analyses/Prepare-RMapDB-Tables/**/salmon_ind/*
+analyses/Prepare-RMapDB-Tables/**/*.tgz
+analyses/Prepare-RMapDB-Tables/**/quant/*
+analyses/Prepare-RMapDB-Tables/**/logs/*
+
+
+
