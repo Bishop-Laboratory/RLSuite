@@ -1,3 +1,4 @@
+library(tidyverse)
 # Compile the data to an rda object for use with the shiny app
 DATA_DIR <- "analyses/Prepare-RMapDB-Tables/"
 OUT_DATA_DIR <- "~/projects/RMapDB-shiny/data/"
