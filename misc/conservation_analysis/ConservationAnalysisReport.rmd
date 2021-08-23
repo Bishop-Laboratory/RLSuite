@@ -1,16 +1,21 @@
 ---
-title: "ConservationAnalysisReport"
+title: "Conservation Analysis Report"
 author: "Jebriel Abdul"
 date: "June 15, 2021"
 output:
   html_document: 
+    toc: true 
+    toc_float: true
+    toc_depth: 2
     code_folding: hide
 ---
 
-Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores. Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not..
+Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores. Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not.
+
+In the analysis I work with a set of 10 kilo-basepair windows - rl_cons. Each window is scored based on the number of r-loops which it overlaps with. 
 
 
-```{r, echo=FALSE, out.width="50%", message=FALSE}
+```{r, echo=FALSE, out.width="50%", message=FALSE, include=TRUE, results='hide'}
 
 ##### Correlation analysis #####
 library(tidyverse)
@@ -47,13 +52,16 @@ top_ranges <- as.data.frame(rl_cons) %>%
   pull(rowname)
 rl_cons[top_ranges,]  # Top 10 Ranges with the maximum score
 ```
+Score indicates the number of r-loops which overlap with each window, and pct_cons - or percent score - indicates the percentage of r-loops which overlap each window. There are 252 r-loops which were used to arrive at these metrics. 
 
-# Metaplot Analysis
+# Metaplot Analysis 
 
-I start by creating metaplots for three different groups of windows: the whole set, windows with a percent score greater than 60 and the 12 highest percent scoring windows.
+Metaplots are used to plot the average profile of a set of peaks. In this case, the average distance from a transcription start site (TSS) for a set of windows is displayed.
+
+Below are the metaplots for three subsets of rl_cons; the whole set, windows with a percent score greater than 60, and top 12 scoring windows. 
 
 
-```{r,  fig.show="hold", out.width="30%", message=FALSE}
+```{r,  fig.show="hold", message=FALSE, collapse=TRUE}
 #preparing annotations
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
@@ -71,17 +79,18 @@ tagMatrix_top_ranges <- getTagMatrix(rl_cons[top_ranges], windows = promoter)
 plotAvgProf(tagMatrix_rl_cons, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons")
 plotAvgProf(tagMatrix_rl_cons_60, xlim=c(-3000,3000), xlab = "Genomic Region (5'->3') rl_cons_60")
 plotAvgProf(tagMatrix_top_ranges,xlim = c(-3000,3000), xlab = "Genomic Region (5' -> 3') top_ranges")
-cat("\n")
+
 ```
-The metaplot for all peaks produces a very noisy plot and so there is no useful information we could take from it. This should have been expected. The other two metaplots are more like those which we might see when analyzing protien coding genes (like NFE2L2 or BCRA1). However, the peaks are more normally distributed around the TSS and produce a curve which is "flatter" than what a protien coding gene might produce.
 
-After transcription, if the nascent RNA had been modified, (ie. spliced, capped and tailed), the anealing of the RNA to the DNA template would displace regions which had previously coded the premature RNA's exons. These displaced regions form loops which are known as R-loops[1]. 
+As expected, the metaplot for all peaks produces a very noisy plot. The other two metaplots are more like those which we might see when analyzing protein coding genes (like NFE2L2 or BCRA1). However, the peaks are more normally distributed around the TSS and produce a curve which is "flatter" than what a protein coding gene might produce.
 
-R loops will form across the whole length of a gene being transcribed, and so peaks will align at windows close to a TSS, but in surrounding regions aswell since thes DNA template for these genes may span at least thousands of base pairs. This explains the "flatter" curve presented by the metaplots of rl_cons_60 and the top 12 ranges. 
+After transcription, if the nascent RNA had been modified, (ie. spliced, capped and tailed), the annealing of the RNA to the DNA template would displace regions which had previously coded the premature RNA's exons. These displaced regions form loops which are known as R-loops[1]. 
+
+R-loops will form across the whole length of a gene being transcribed, and so r-loops will align at windows close to a TSS, but also in surrounding regions since the DNA template for these genes may span at least thousands of base pairs. This may explain the "flatter" curve presented by the metaplots of rl_cons_60 and the top 12 ranges. 
 
 Knowing this, I would expect the see groups of windows with higher percent scores present increasingly flat curves - if more peaks align to the higher scoring windows, then there should be more peaks which are further upstream from the TSS. Windows with lower percent scores would produce curves which are just noise, as in the first meta plot.
 
-After creating the returnTagMatrix function (for better readability), I repeat the process in increments of 10 (except for windows with percent scores greater than 80. There were too few windows to justify ploting 80-90 and/or 90-100 percents score windows).
+I repeat the process for percent levels, where each level increases 10 points. Windows with a percent score less than 10% are omitted from this point forward. 
 
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
@@ -122,14 +131,45 @@ returnTagMatrix<-function(peaks){
             xlab = paste(min(peaks$pct_cons),"-",max(peaks$pct_cons),"%",sep=""))
 }
 
+names(rl_list) <- c("10-20% score",
+                    "20-30% score",
+                    "30-40% score",
+                    "40-50% score",
+                    "50-60% score",
+                    "60-70% score",
+                    "70-80% score",
+                    "80-87% score")
 
-lapply(rl_list,returnTagMatrix)
 ```
+
+```{r}
+returntagmatrix <- TRUE 
+upsetplots <- FALSE
+```
+
+# Percent metaplots {.tabset}
+```{r, echo=FALSE, results='asis', cache=FALSE}
+levelsMetaplots <- lapply(names(rl_list), function(groupNow){
+  setNow <- rl_list[[groupNow]]
+  knitr::knit_child('general_tab_template.Rmd', envir = environment(), quiet = TRUE)
+
+})
+cat(unlist(levelsMetaplots), sep = "\n")
+
+#lapply(rl_list, returnTagMatrix)
+
+```
+#
+
 X labels describe the range of percent score of each plot.
 
 My hypothesis was incorrect. Instead of the curve becoming more flat as I plotted higher scoring windows, each group after 40% showed a simlar curve, normally distributed around the TSS. The same remarks hold true for the higher scoring groups, that peaks would be found at and near the TSS. But as the percent score increases, there doesn't appear to be any change in where peaks are located. 
+
 I was also incorrect with lower scoring windows. Between percent scores of 0-39%, curves are inversions of what is seen with higher scoring peaks. 
-It seems then that lesser conserved RLoops are unlikely to be found near the TSS of a gene and more conserved Rloops are more likely to be found near the TSS.
+It seems then that lesser conserved r-loops are unlikely to be found near the TSS of a gene and more conserved r-loops are more likely to be found near the TSS.
+
+
+# Strata metaplots {.tabset}
 
 Following this, the whole set of windows were ranked in ascending order of percent score, then split into 10 groups, each with an equal number of windows. Metaplots were then generated from these new groups. 
 
@@ -145,13 +185,44 @@ rankWindows <- function(peaks){
 test<-splitVia(rankWindows(rl_cons),10,"strata")
 
 #generate metaplots
-lapply(test[1:10],returnTagMatrix)
+#lapply(test[1:10],returnTagMatrix)
+
+names(test) <- c("10-11% score",
+                 "11-13% score",
+                 "13-14% score",
+                 "14-17% score",
+                 "17-20% score",
+                 "20-23% score",
+                 "23-28% score",
+                 "28-35% score",
+                 "35-46% score",
+                 "46-86% score")
 
 ```
 
-The same trend shown by the first group of metaplots is true for the transformed data as well; lower percent scoring windows tend to be further from the TSS compared to higher percenting scoring windows. However, a large portion of the whole set of windows are located hundreds of basepairs from a TSS. This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs). And given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a decrepency between higher and lower scoring windows in their relationship to RLFRs.
+```{r, echo=FALSE, results='asis', cache=FALSE}
 
-The explore this question, a permutation test over rl_cons is run against a region set describing r-loop forming regions. This was done first on the whole set of windows,
+strataMetaplots <- lapply(names(test)[1:10], function(groupNow){
+  setNow <- test[[groupNow]]
+  knitr::knit_child('general_tab_template.Rmd', envir = environment(), quiet = TRUE)
+
+})
+cat(unlist(strataMetaplots), sep = "\n")
+
+#lapply(rl_list, returnTagMatrix)
+
+```
+
+#
+
+The same trend shown by the metaplots of the percent level groups is true for the group of strata as well; lower percent scoring windows tend to be further from the TSS compared to higher percent scoring windows. However, a large portion of the whole set of windows are located hundreds of base pairs from a TSS.
+
+This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs). Given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a discrepancy between higher and lower scoring windows in their relationship to RLFRs?
+
+
+# Permutation tests {.tabset}
+
+To explore the previous question, a permutation test over rl_cons is run against a region set describing r-loop forming regions. This was done first on the whole set of windows,
 
 ```{r,echo=FALSE, fig.show="hold", message=FALSE, warning=FALSE, cache=TRUE}
 #library(regioneR)
@@ -188,20 +259,30 @@ perm_test(rl_cons,2,"hg38", hg38_rlfs,chrom_sizes_hg38)
 
 ```
 
-as well as each tenth.
-```{r,echo=FALSE, fig.show="hold", out.width="50%", message=FALSE, warning=FALSE, cache=TRUE}
-lapply(test, perm_test, cores=4, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
+As well as each strata.
+
+Figures are displayed in ascending order of percent score:
+
+```{r,echo=FALSE, fig.show="hold", out.width="50%", message=FALSE, warning=FALSE,cache=TRUE, include=TRUE, results='hide'}
+lapply(test[1:10], perm_test, cores=2, genome="hg38", rlfs=hg38_rlfs, chrom_sizes=chrom_sizes_hg38)
 
 ```
-In reviewing the results of the test for rl_cons it can no longer be assumed that there is no relationship between the whole set of windows and r-loop forming regions (given a significance threshold of 0.05). The same can also be said for each tenth in the ranked set.
+In reviewing the results of the test for rl_cons it can no longer be assumed that there is no relationship between the whole set of windows and r-loop forming regions (given a significance threshold of 0.05). The same can also be said for each strata in the ranked set.
 
-The z score tends to increase with the percent score of each tenth.
+The z score tends to increase with the percent score of each strata.
 
-Local z score across all tenths remains relatively flat, suggesting a regional relationship between rl_cons and the r-loop forming regions. This may be due to the windows being relatively large(10kb). 
+Local z score across the first six strata (10-23% score) appear to show some fluctuation but there is no indication that the exact location of these windows have an association with the set of r-loop forming regions.
+This could be due to the large size of the windows. The remaining 4 strata, with the last one in particular begin to show a notable peak in the local z-score, which may indicate a more legitimate relationship between these windows and the set of RLFRs.
 
-# Peak annotation and upset plots
+# Peak annotation and upset plots {.tabset}
 
-Following this, I annotated the windows (by the same 10 increment groupings) and used upset plots to display the data. From our understanding of R-loops, I would expect that higher scoring windows would have a greater amount of peaks which span all of 3' and 5' untranslated regions (UTR), promoter, exons and introns. Lower scoring groups would have most peaks overlapping 1 or two of these regions. 
+Following this, I annotated the windows (according to percent levels) and used upset plots to display the data. From our understanding of R-loops, I would expect that higher scoring windows would have a greater amount of peaks which span all of 3' and 5' untranslated regions (UTR), promoter, exons and introns. Lower scoring groups would have most peaks overlapping 1 or two of these regions. 
+
+```{r}
+returntagmatrix <- FALSE 
+upsetplots <- TRUE
+```
+
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
 library(ggupset)
@@ -211,16 +292,27 @@ annotateAndUpset <- function(ranges){
   rl_annotated<- annotatePeak(ranges,tssRegion=c(-3000, 3000),TxDb=txdb)
       upsetplot(rl_annotated, vennpie = TRUE)
 }
-
-#return an upset plot for each percent score group 
-lapply(rl_list, annotateAndUpset)
 ```
 
+```{r, echo=FALSE, results='asis', cache=FALSE}
+ #return an upset plot for each percent score group
+upsetresults <- lapply(names(rl_list), function(groupNow){
+   setNow <- rl_list[[groupNow]]
+   knitr::knit_child('general_tab_template.Rmd', envir = environment(), quiet = TRUE)
+ })
+
+cat(unlist(upsetresults), sep = '\n')
+```
+
+#
 My hypothesis seems to hold true per the upset plots; higher scoring windows have more peaks which span the 5 relevant regions (introns, exons, promoters, 3' and 5' UTRs), whereas lower scoring peaks have fewer peaks spanning the 5 regions. This divide between higher and lower scoring windows is the same as the meta plots - after a 40% score, there is appears to be a divide in the trends which each group shows. 
 
-### Gene data tables
-Below is the set of data tables storing the genetic information (start, end, width, name and description) for genes contained by each window. Again, windows were separated based on their percent scores.
-```{r, echo=FALSE}
+# Gene data tables
+
+Data tables storing genetic information (start, end, width, name and description) for genes contained by each window are stored in the repository and are too large to display here.
+
+Data tables were generated for each percent level and strata
+```{r, echo=FALSE, include=TRUE, results='hide', warning=FALSE,message=FALSE}
 
 addGenes <- function(annoData, peaks){
   #function takes a txdb object and GRanges object
@@ -265,7 +357,7 @@ gene_table<- function(rLoopRanges){
   #   write.csv(as.data.frame(rLoopRanges), current_file_csv)
   # }
   
-  show(currentData)
+  currentData
   
 }
 
@@ -274,8 +366,7 @@ lapply(rlAnnoList,gene_table)
 
 ```
 
-Gene data tables of the tenths using the same methods:
-```{r echo=FALSE}
+```{r echo=FALSE, include=TRUE, results='hide', message=FALSE,warning=FALSE}
 
 #take annotated windows and rank them according to percent score, them split into 10 strata
 rlAnnoRankedList<- splitVia(rankWindows(rl_withGenes),10,"strata")
@@ -293,174 +384,51 @@ if(is.null(listEnrichrDbs()))
   websiteLive<-FALSE
 ```
 
-# Enrichment analysis {.tabset}
-Below is an enrichment analysis of some percent scoring groups. For each analysis I use the following work flow; a P.value threshold x (0.01<=x<=0.05) was used, then the set of terms were sorted in decending order [5][6].
+# Enrichment analysis (percent levels) {.tabset}
 
-For the 80-100% scoring group, I first began by comparing its gene set to the ChEA database. 
+Using the enrichr tool, we learn from pathway enrichment that groups which have a higher percent score tend to be associated with characteristics expected of r-loops.
 
--The highest ranking pathway is for the IKZF1 gene in male colorectal carcinoma cell lines [7]. IKZF1: expression is restricted to fetal and adult hemo-lymphopoietic system and functions as a regulator of lymphocyte differentiation [8]. All three of the genes enriched in this pathway serve some function to transfer phosphates. PRKCG code for a kinase, NPR1 is a guanylate cyclase and PTPN6 is a phosphatase. However, the kinase encoded by PRKCG is only exprssed in the brain and spinal cord [9].
-
-
-Breakdown of top 5(human cell lines only):
-
-## 80-100% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=ae2bceb7fa582a59a487f4a25e3f2157
-* IKZF1/HCT116 - Regulator of lymphoctye differentiation; colorectal cancer
-* KDM5A/BREAST - Gene regulation via histone demethylation[10];
-* MYC/BL - Proto-oncogene, dimerizes and complexes with TF MAX to regulate transcription of target genes[11]; Burkitt lymphoma 
-* DACH1/MDA-MB-231 - C ion and cell fate determination during development, highly conserved Ski domain between Drosophila and human[12]; late stage breast cancer model 
-* LXR/THP-1 - cholestersol transport and now lipid and carbohydrate metabolism, cell diferentiation and apoptosis[13]; peripheral blood monocyte 
-
-```{r,message=FALSE}
-
-rl80100 <- rl_withGenes[which(rl_withGenes$pct_cons >80 & rl_withGenes$pct_cons <100 )]
-rl80100_symbols <- unique(rl80100$symbol)
-enriched80100 <- enrichr(rl80100_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e80100<-enriched80100[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e80100[e80100$P.value>=0.01 & e80100$P.value<=0.05,],
-          caption = "80-100% conservation",
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-
-```
-
-## 70-80% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=79c154d7f327e99466fcf36bb1b59a39
-* ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
-* PKCTHETA/BREAST - Activation of mature T cells [15]; 
-* DMRT1/FETAL Ovary - Vertebrate sex determination [16];
-* P68/HELA - RNA helicase, overexpresssion is implicated in several cancers[16]; cancerous-cervical epithelial 
-* CREB1/LNCaP-abl - Induces transcription of genes in reponse to hormonal stimulation of cAMP pathway[18]; Prostate carcinoma 
-```{r,message=FALSE}
-
-rl7080 <- rl_withGenes[which(rl_withGenes$pct_cons >70 & rl_withGenes$pct_cons <80 )]
-rl7080_symbols <- unique(rl7080$symbol)
-enriched7080 <- enrichr(rl7080_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e7080<-enriched7080[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e7080[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-
-```
-
-## 60-70% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=5ee5a9c14b529497c6dda82f4a953f18
-* EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
-* ZNF652/ZR75-1 - Zinc finger[14]; mammary gland/breast/duct epithelial
-* KDM6A/U937 and SAOS2 - catalyzes demethylation of histone H3[20]; Pleura/pleural effusion, lymphocyte, myeloid monocyte Histiocytic lymphoma + Bone epithelial Osteosarcoma
-* TP53/ IMR90 - Enducing cell cycle arrest, apoptosis, senescence and DNA repair in response to cellular stress[21];Lung fibroblast - normal
-* PKCTHETA/BREAST - - Activation of mature T cells [15];
-```{r,message=FALSE}
-rl6070 <- rl_withGenes[which(rl_withGenes$pct_cons >60 & rl_withGenes$pct_cons <70 )]
-rl6070_symbols <- unique(rl6070$symbol)
-enriched6070 <- enrichr(rl6070_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e6070<-enriched6070[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e6070[e6070$P.value>=0.01 & e6070$P.value<=0.05,],
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-```
-
-## 50-60% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=241b3fb3a27245fc21eea20ca0626605
-Unorderdered rankings
-* ELF3/PDAC-Cell line - Associated with Sarcoma, Synovial and Ampulla of Vater Cancer [22]; Pancreatic Ductal adenocarcinoma
-* KLF4/PDAC-Cell line - Mediates p53(tumor supressor) gene, thereby controlling G1-to-S cell cycle transition after Dna damage[23];Pancreatic Ductal adenocarcinoma
-* EGR1/THP-1 - products of targets are required for differentiation and mitogenisis[19]; peripheral blood monocyte 
-* NR1H3/ AtherOSCLEROTIC-FOAM - Family members are regulators of macrophage function (controlling transcriptional programs involved in lipid homeostasis and inflammation) [24]; "Lipid filled" macrophages
-```{r,message=FALSE}
-rl5060 <- rl_withGenes[which(rl_withGenes$pct_cons >50 & rl_withGenes$pct_cons <60 )]
-rl5060_symbols <- unique(rl5060$symbol)
-enriched5060 <- enrichr(rl5060_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e5060<-enriched5060[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e5060[e5060$P.value>=0.01 & e5060$P.value<=0.05,],
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-```
-
-## 40-50% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=f3ef676d09ac7fd0ee717c2cd6c7f577
-* Percent score 40-50%; very low combined score. Therefore lower Z score; pathways are not significantly enriched compared to the mean rank at this conservation level(?).
-* General trend before this group was a decrease in number of terms which are enriched. 
-* E2F1/MCF-7 - plays a role in cell cycle progression and controls tumor suppresor protiens [25];Breast epithelial Adenocarcinoma
-* EOMES/HESCs - Development of the mesoderm and and central nervous system in vertebrates [26]. Recently, the tf also regulates the differentiations of certain NKT cells in the thymus[27]; 
-* ELK1/HELA - Implicated to target several genes which have roles in certain neurological phenotypes[29];cancerous-cervical epithelial
-* MYC/BL - Proto-oncogene, dimerizes and complexes with TF MAX to regulate transcription of target genes[11]; Burkitt lymphoma 
-* SA1/ ERYTHROID - Encodes a compoment of cohesin(under the alias STAG1) [28];
-```{r,message=FALSE}
-rl4050 <- rl_withGenes[which(rl_withGenes$pct_cons >40 & rl_withGenes$pct_cons <50 )]
-rl4050_symbols <- unique(rl4050$symbol)
-enriched4050 <- enrichr(rl4050_symbols, c("ChEA_2016"))
-e4050<-enriched4050[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e4050[e7080$P.value>=0.01 & e7080$P.value<=0.05,],
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-```
-
-## 30-40% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=3ea142080e4a4d7c3de3d0d4f5d9e3b9
-- E2F7/HELA - Cell cycle progression[31]; cancerous-cervical epithelial
-- FOXM1/OE33 and U2OS - Implicated in DNA drepair, senscence, and tumor proliferation[30]; Human esophagus and Epithelial bone Osteosarcoma (respectively)
-```{r,message=FALSE}
-rl3040 <- rl_withGenes[which(rl_withGenes$pct_cons >30 & rl_withGenes$pct_cons <40 )]
-rl3040_symbols <- unique(rl3040$symbol)
-enriched3040 <- enrichr(rl3040_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e3040<-enriched3040[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e3040[e3040$P.value>=0.01 & e3040$P.value<=0.05,],
-          options = list(
-          dom = 't',
-          scrollX = TRUE,
-          fixedColumns = list(leftColumns = 1),
-          scrollCollapse = TRUE))
-```
-
-## 20-30% Conservation
-https://maayanlab.cloud/Enrichr/enrich?dataset=0ccdc80016e7b3d65a0f3b3af2cfbea7
-```{r,message=FALSE}
-rl2030 <- rl_withGenes[which(rl_withGenes$pct_cons >20 & rl_withGenes$pct_cons <30 )]
-rl2030_symbols <- unique(rl2030$symbol)
-enriched2030 <- enrichr(rl2030_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e2030<-enriched2030[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e2030[e2030$P.value>=0.01 & e2030$P.value<=0.05,])
-```
+Links to enrichment results via the enrichr website are included under each tab.
 
 ```{r}
-rl1020 <- rl_withGenes[which(rl_withGenes$pct_cons >10 & rl_withGenes$pct_cons <20 )]
-rl1020_symbols <- unique(rl1020$symbol)
-enriched1020 <- enrichr(rl1020_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e1020<-enriched1020[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e1020[e1020$P.value>=0.01 & e1020$P.value<=0.05,])
+dataLst0 <- list(
+  "10-20% Conservation" = c(rlAnnoList[[1]]$symbol),
+  "20-30% Conservation" = c(rlAnnoList[[2]]$symbol),
+  "30-40% Conservation" = c(rlAnnoList[[3]]$symbol),
+  "40-50% Conservation" = c(rlAnnoList[[4]]$symbol),
+  "50-60% Conservation" = c(rlAnnoList[[5]]$symbol),
+  "60-70% Conservation" = c(rlAnnoList[[6]]$symbol),
+  "70-80% Conservation" = c(rlAnnoList[[7]]$symbol),
+  "80-87% Conservation" = c(rlAnnoList[[8]]$symbol)
+)
+
+enrichLinks0 <- lapply(names(dataLst0), function(group) {
+  genes<- dataLst0[[group]]
+  response <- httr::POST(url = 'https://maayanlab.cloud/Enrichr/addList', body = list(
+    'list' = paste0(genes, collapse = "\n"),
+    'description' = group
+  ))
+  jsonlite::fromJSON(httr::content(response, as = "text"))
+})
+names(enrichLinks0) <- names(dataLst0)
+#for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
-```{r}
-rl10 <- rl_withGenes[which(rl_withGenes$pct_cons <10 )]
-rl10_symbols <- unique(rl10$symbol)
-enriched10 <- enrichr(rl10_symbols, c("ChEA_2016","GO_Molecular_Function_2018", "GO_Cellular_Component_2018", "GO_Biological_Process_2018"))
-e10<-enriched10[["ChEA_2016"]]
-#datatable(e[e$P.value<=0.05,])
-datatable(e10[e10$P.value>=0.01 & e10$P.value<=0.05,])
+
+
+```{r childRMD0, echo=FALSE, results='asis', cache=FALSE}
+res0 <- lapply(names(dataLst0), function(groupNow) {
+  genesNow <- dataLst0[[groupNow]]
+  permalinkNow <- enrichLinks0[[groupNow]]$shortId
+  knitr::knit_child(
+    'tab_template.Rmd', envir = environment(), quiet = TRUE
+  )
+})
+cat(unlist(res0), sep = '\n')
 ```
+
+
+# Enrichment analysis (strata) {.tabset}
+
 
 ```{r}
 dataLst <- list(
@@ -474,7 +442,6 @@ dataLst <- list(
   "46-54% Conservation" = c(rlAnnoRankedList[[8]]$symbol),
   "54-63% Conservation" = c(rlAnnoRankedList[[9]]$symbol),
   "63-87% Conservation " = c(rlAnnoRankedList[[10]]$symbol)
-
 )
 
 enrichLinks <- lapply(names(dataLst), function(group) {
@@ -486,24 +453,40 @@ enrichLinks <- lapply(names(dataLst), function(group) {
   jsonlite::fromJSON(httr::content(response, as = "text"))
 })
 names(enrichLinks) <- names(dataLst)
-for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
+#for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
 
 
+```{r childRMD, echo=FALSE, results='asis', cache=FALSE}
+res <- lapply(names(dataLst), function(groupNow) {
+  genesNow <- dataLst[[groupNow]]
+  permalinkNow <- enrichLinks[[groupNow]]$shortId
+  knitr::knit_child(
+    'tab_template.Rmd', envir = environment(), quiet = TRUE
+  )
+})
+cat(unlist(res), sep = '\n')
+```
+
+
+
 # General observations:
-Many of the higher ranking pathways within each conservation group play a role in cell differentation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor supressing or proliferating pathways. 
-A trend within the overall data set is that there is a decrease in the number of enriched pathways as percent score decreases - with the exception of the 40-50% group and the groups with less than 30% conservation. For the former, there are no enriched pathways. Perhaps there is a correlation between the enrichment of transcription factors and their closeness to a TSS (see Metaplot analysis for <30% conseration groups).
+Many of the higher ranking pathways within each conservation group play a role in cell differentiation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor suppressing or proliferating pathways. 
+
+A trend within the overall data set is that there is a decrease in the number of enriched pathways as percent score decreases.
 
 # Discussion/Conclusion
-Using the percent score as a metric for what is a highly conserved R loop prooves to be an effective tool which aligns with what we currently know about Rloops. Windows with higher percent scores are more likely to share characteristics which are expected of Rloop regions. High percent scoring windows are more likely to be closer to the TSS of gene and still have a notable presence surrounding it. Conversely, lower percent scoring windows have little presence near the TSS.
-  Upset plots show a similar distinction between lower percent scoring windows and high percent scoring windows; as the percent score increases there is a greater presence of peaks which overlap whole genes. This is expected as the region which Rloops span may overlap large portions of a gene on a template strand. 
-  Finally, we see that pathwys which are implicated in Rloop formation - such as the M phase and transcription and translational roles - are more present in windows with higher percent scores. 
+Using the percent score as a metric for what is a highly conserved R loop proves to be an effective tool which aligns with what we currently know about r-loops. Windows with higher percent scores are more likely to share characteristics which are expected of r-loop regions. High percent scoring windows are more likely to be closer to the TSS of gene and still have a notable presence surrounding it. Conversely, lower percent scoring windows have little presence near the TSS.
+  Upset plots show a similar distinction between lower percent scoring windows and high percent scoring windows; as the percent score increases there is a greater presence of peaks which overlap whole genes. This is expected as the region which r-loops span may overlap large portions of a gene on a template strand. 
+  Finally, we see that pathwys which are implicated in r-loop formation - such as the M phase and transcription and translational roles - are more present in windows with higher percent scores. 
 
-From here there are several avenues on which to continue this sort of work. Some next steps might be to analyze  how Rloops are conservered among different species. Another might be to analyze the correlation between conserved genes and Rloops which may form from them - this idea comes the the presence of the Rho GTPase pathway in many percent score groups. 
-  More over, one could explore the presence of neuronal pathways in less conserved Rloops, as Rloops are implicated in many neurological diseases [1]. 
-  Finally, one could look at the difference in CG content between lesser and highly conserved Rloops. Rloops are found to form over unmethylated CpG islands [4] (which are characteristic of euchromatic regions) and so perhaps this may be another characteristic of highly conserved Rloops.
+From here there are several avenues on which to continue this sort of work. Some next steps might be to analyze  how r-loops are conserved among different species. Another might be to analyze the correlation between conserved genes and r-loops which may form from them - this idea comes the the presence of the Rho GTPase pathway in many percent score groups. 
+  More over, one could explore the presence of neuronal pathways in less conserved r-loops, as r-loops are implicated in many neurological diseases [1]. 
+  Finally, one could look at the difference in CG content between lesser and highly conserved r-loops. R-loops are found to form over unmethylated CpG islands [4] (which are characteristic of euchromatic regions) and so perhaps this may be another characteristic of highly conserved r-loops.
   
-It is important to note that any trend extracted from analyzing the 70-100% percent scoring groups may have a bias due to their sample size (there are less than 500 windows with a percent score greater than 70).
+Although the analysis has been fruitful, the late addition of the permutation test points to a flaw in the current approach - the 10kb sized windows. The large size may be too encompassing of the r-loop data, which was used here, to indicate any biologically significant relationship with r-loop forming regions. Further work may explore smaller sized windows.   
+
+It is important to note that any trend extracted from analyzing the 70-100% percent scoring groups may have a bias due to their sample size (there are about 2000 windows with a percent score greater than 70).
 
 
 
@@ -514,30 +497,5 @@ It is important to note that any trend extracted from analyzing the 70-100% perc
 4. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4955522/
 5. https://www.researchgate.net/post/Enrichr_what_value_of_combined_score_is_significant
 6. https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-128
-7. https://www.atcc.org/products/all/CCL-247.aspx
-8. https://www.genecards.org/cgi-bin/carddisp.pl?gene=IKZF1#summaries
-9. https://www.genecards.org/cgi-bin/carddisp.pl?gene=PRKCG#summaries
-10. https://www.genecards.org/cgi-bin/carddisp.pl?gene=KDM5A#summaries
-11. https://www.genecards.org/cgi-bin/carddisp.pl?gene=MYC#:~:text=MYC%20(MYC%20Proto%2DOncogene%2C,Bcl2%20And%2FOr%20Bcl6%20Rearrangement.
 
-https://jbiol.biomedcentral.com/articles/10.1186/jbiol217 THO complex
-12. https://www.genecards.org/cgi-bin/carddisp.pl?gene=DACH1
-13. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2792482/
-14. https://www.genecards.org/cgi-bin/carddisp.pl?gene=ZNF652
-15. https://academic.oup.com/jb/article-abstract/132/6/841/856026?redirectedFrom=fulltext
-16. https://www.genecards.org/cgi-bin/carddisp.pl?gene=DMRT1
-17. https://www.nature.com/articles/onc201542
-18. https://www.genecards.org/cgi-bin/carddisp.pl?gene=CREB1
-19. https://www.genecards.org/cgi-bin/carddisp.pl?gene=EGR1
-20. https://www.genecards.org/cgi-bin/carddisp.pl?gene=KDM6A
-21. https://www.genecards.org/cgi-bin/carddisp.pl?gene=TP53
-22. https://www.genecards.org/cgi-bin/carddisp.pl?gene=ELF3
-23. https://www.genecards.org/cgi-bin/carddisp.pl?gene=KLF4
-24. https://www.genecards.org/cgi-bin/carddisp.pl?gene=NR1H3
-25. https://www.genecards.org/cgi-bin/carddisp.pl?gene=E2F1
-26. https://www.genecards.org/cgi-bin/carddisp.pl?gene=EOMES
-27. https://www.nature.com/articles/s42003-019-0389-3
-28. https://www.genecards.org/cgi-bin/carddisp.pl?gene=STAG1
-29. https://www.sciencedirect.com/topics/neuroscience/transcription-factor-elk-1
-30. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3588610/#:~:text=FoxM1%20functions%20in%20response%20to,once%20the%20damage%20is%20repaired.
-31. https://www.genecards.org/cgi-bin/carddisp.pl?gene=E2F7
+
