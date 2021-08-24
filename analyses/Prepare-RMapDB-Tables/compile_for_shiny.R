@@ -10,9 +10,13 @@ dataLst <- fls %>%
   sapply(readr::read_csv)
 
 # Add in FFT Results
-load("analyses/rmapfftsmall.rda")
-dataLst$rmap_samples <- dataLst %>%
-  pluck("rmap_samples") %>%
+load("analyses/fft_analysis/rmapfftsmall.rda")
+rmap_samples <- dataLst %>%
+  pluck("rmap_samples")
+if ("prediction" %in% colnames(rmap_samples)) {
+  rmap_samples$prediction <- NULL
+}
+dataLst$rmap_samples <- rmap_samples %>%
   inner_join(select(rmapfftsmall, id, prediction), by = "id") 
 
 save(dataLst, file = file.path(OUT_DATA_DIR, "dataLst.rda"), compress = "xz")
