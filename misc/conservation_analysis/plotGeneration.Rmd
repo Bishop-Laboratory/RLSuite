@@ -1,0 +1,17 @@
+
+## `r groupNow`
+```{r, eval=returntagmatrix}
+plotAvgProf(setNow,
+            xlim = c(-3000,3000),
+            xlab = paste(names(setNow)))
+```
+
+```{r, eval = upsetplots, include=TRUE, results='hide'}
+annotateAndUpset(setNow)
+```
+
+```{r, eval = permfigs, out.width="50%",echo=FALSE, message=FALSE, warning=FALSE,cache=TRUE, include=TRUE, results='hide'}
+show(plot(rl_strataPermTestResults[[groupNow]][[1]]))
+show(plot(rl_strataPermTestResults[[groupNow]][[2]]))
+```
+
