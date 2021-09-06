@@ -22,3 +22,5 @@ Biobase
 AnnotationDbi
 GenomicFeatures
 TxDb.Hsapiens.UCSC.hg38.knownGene
+ggupset
+org.Hs.eg.db
