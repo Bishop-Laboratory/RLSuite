@@ -1,33 +1,56 @@
 ---
 title: "Conservation Analysis Report"
-author: "Jebriel Abdul"
-date: "June 15, 2021"
+author:  "Jebriel Abdul<br><small>Bioinformatics Research Network<br>UO</small>"
+date: "<small>`r Sys.Date()`</small>"
 output:
   html_document: 
     toc: true 
     toc_float: true
     toc_depth: 2
     code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: sentence
+bibliography: references.bib
 ---
 
-Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores. Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not.
+```{r setup and library, warning=FALSE, message=FALSE, echo=FALSE, include=FALSE}
+# Setup
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
+                      cache = FALSE, echo = FALSE, include = TRUE, results = 'hide')
+```
 
-In the analysis I work with a set of 10 kilo-basepair windows - rl_cons. Each window is scored based on the number of r-loops which it overlaps with. 
+#Introduction
+Broadly; what types are r-loops are strongly vs. weakly conserved Most and least conserved r loops?
+1. What are the R-loop sites that are most conserved and least conserved?
+2. How does conservation relate to overlap with genes/pathways and genomic features such as the TSS?
 
+Preceding work for the conservation analysis is omitted aside from histograms plotting window's scores and percent scores.
+Here I attempt to define some characteristics of highly conserved R-loops and distinguish them from those which are not.
 
-```{r, echo=FALSE, out.width="50%", message=FALSE, include=TRUE, results='hide'}
+In the analysis I work with a set of 10 kilo-basepair windows - `rl_cons`.
+Each window is scored based on the number of r-loops which it overlaps with.
 
-##### Correlation analysis #####
+```{r libraries}
+
 library(tidyverse)
 library(ChIPpeakAnno)
 library(ChIPseeker)
 library(ReactomePA)
 library(DT)
 library(rtracklayer)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+```
+
+
+```{r out.width="50%"}
+
+##### Correlation analysis #####
 
 ## Steps to do the conservation analysis -- start here ##
 
-#Read in the results as a GRanges object
+#Read in the results as a GRanges object -- add file path to params
 rl_cons <- read_tsv("data/hg38_10kb-widow_2.5kb-step_tiles.conservation_levels.bed", skip = 1,
                     col_names = c("name", "seqnames", "start", "end", "score"))
 rl_cons <- toGRanges(as.data.frame(rl_cons))
@@ -35,7 +58,12 @@ rl_cons <- toGRanges(as.data.frame(rl_cons))
 
 # The score column of rl_cons represents the number of samples overlapping with that 10kb range
 # See the histogram of scores
-hist(rl_cons$score)
+hist(rl_cons$score, 
+     main="Conservation score of 10kb windows", 
+     xlab="Score", 
+     border="blue"
+    )
+
 # Total number of samples is 252
 total_number_of_samples <- 252
 
@@ -43,7 +71,11 @@ total_number_of_samples <- 252
 rl_cons$pct_cons <- 100 * (rl_cons$score / 252)
 
 # See histogram of pct conservation
-hist(rl_cons$pct_cons)
+hist(rl_cons$pct_cons, 
+     main="Percent conservation of 10kb windows", 
+     xlab="Percent score", 
+     border="blue"
+    )
 
 # Some windows have many R-loops overlapping with them, some have very few
 top_ranges <- as.data.frame(rl_cons) %>%
@@ -52,17 +84,19 @@ top_ranges <- as.data.frame(rl_cons) %>%
   pull(rowname)
 rl_cons[top_ranges,]  # Top 10 Ranges with the maximum score
 ```
-Score indicates the number of r-loops which overlap with each window, and pct_cons - or percent score - indicates the percentage of r-loops which overlap each window. There are 252 r-loops which were used to arrive at these metrics. 
 
-# Metaplot Analysis 
+Score indicates the number of r-loops which overlap with each window, and pct_cons - or percent score - indicates the percentage of r-loops which overlap each window.
+There are 252 r-loops which were used to arrive at these metrics.
 
-Metaplots are used to plot the average profile of a set of peaks. In this case, the average distance from a transcription start site (TSS) for a set of windows is displayed.
+# Metaplot Analysis
 
-Below are the metaplots for three subsets of rl_cons; the whole set, windows with a percent score greater than 60, and top 12 scoring windows. 
+Metaplots are used to plot the average profile of a set of peaks.
+In this case, the average distance from a transcription start site (TSS) for a set of windows is displayed.
 
-```{r,  fig.show="hold", message=FALSE, collapse=TRUE, out.width="30%"}
+Below are the metaplots for three subsets of rl_cons; the whole set, windows with a percent score greater than 60, and top 12 scoring windows.
+
+```{r,  fig.show="hold", collapse=TRUE, out.width="30%"}
 #preparing annotations
-library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
 promoter <- getPromoters(TxDb=txdb, upstream=3000, downstream=3000)
 
@@ -75,9 +109,12 @@ tagMatrix_rl_cons_60 <- getTagMatrix(rl_cons_60,windows = promoter)
 tagMatrix_top_ranges <- getTagMatrix(rl_cons[top_ranges], windows = promoter)
 
 #creating metaplots for the three groups above
-plotAvgProf(tagMatrix_rl_cons, xlim=c(-3000, 3000), xlab="Genomic Region (5'->3') rl_cons")
-plotAvgProf(tagMatrix_rl_cons_60, xlim=c(-3000,3000), xlab = "Genomic Region (5'->3') rl_cons_60")
-plotAvgProf(tagMatrix_top_ranges,xlim = c(-3000,3000), xlab = "Genomic Region (5' -> 3') top_ranges")
+plotAvgProf(tagMatrix_rl_cons, xlim=c(-3000, 3000)) + ggtitle("Average profile for whole set of windows") +
+  theme(plot.title = element_text(hjust = 0.5))
+plotAvgProf(tagMatrix_rl_cons_60, xlim=c(-3000,3000)) + ggtitle("Average profile of windows with percent score greater than 60")+
+  theme(plot.title = element_text(hjust = 0.5))
+plotAvgProf(tagMatrix_top_ranges,xlim = c(-3000,3000)) + ggtitle("Average profile of top 12 scoring windows")+
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -112,6 +149,13 @@ rankWindows <- function(peaks){
   return(makeGRangesFromDataFrame(peaksDF%>%arrange(pct_cons), keep.extra.columns = TRUE))
 }
 
+generateNames <- function(gRangesList){
+  names(gRangesList) <- lapply(gRangesList, function(current){
+    names(current) <- paste0(round(min(current$pct_cons)),"-",round(max(current$pct_cons)),"% score")
+  })
+}
+
+#magic number - add params at top 
 perm_test <- function(peaks, cores, genome, rlfs,chrom_sizes) {
   
   peaks <- regioneR::toGRanges(peaks)
@@ -180,14 +224,7 @@ gene_table<- function(rLoopRanges){
 #create a granges list by splitting according to 10 percent intervals
 rl_list<-splitVia(rl_cons, 10, "interval")
 
-names(rl_list) <- c("10-20% score",
-                    "20-30% score",
-                    "30-40% score",
-                    "40-50% score",
-                    "50-60% score",
-                    "60-70% score",
-                    "70-80% score",
-                    "80-87% score")
+names(rl_list) <- generateNames(rl_list)
 
 rl_listTagMatricies <- lapply(rl_list,getTagMatrix,windows=promoter)
 ```
@@ -196,16 +233,7 @@ rl_listTagMatricies <- lapply(rl_list,getTagMatrix,windows=promoter)
 #create a granges list by splitting into 10 strata
 rl_strata<-splitVia(rankWindows(rl_cons),10,"strata")
 
-names(rl_strata) <- c("10-11% score",
-                 "11-13% score",
-                 "13-14% score",
-                 "14-17% score",
-                 "17-20% score",
-                 "20-23% score",
-                 "23-28% score",
-                 "28-35% score",
-                 "35-46% score",
-                 "46-86% score")
+names(rl_strata) <- generateNames(rl_strata)
 
 rl_strataTagMatricies <- lapply(rl_strata,getTagMatrix,windows = promoter)
 
@@ -214,10 +242,8 @@ rl_strataTagMatricies <- lapply(rl_strata,getTagMatrix,windows = promoter)
 ```{r echo=FALSE, message=FALSE, warning=FALSE,cache=TRUE, include=TRUE, results='hide'}
 #permutation test preparation
 
-#library(regioneR)
-
 hg38_rlfs <- as.data.frame(read_tsv("hg38.rlfs.bed",
-                    col_names = c("name", "start", "end","m1","m2", "stand")))#two empty metadata cols?
+                    col_names = c("name", "start", "end","m1","m2", "stand")))
 
 chrom_sizes_hg38 <- read_tsv("data/hg38.chrom.sizes", col_names = FALSE)
 
@@ -239,16 +265,21 @@ rlAnnoList <- splitVia(rl_withGenes, 10, "interval")
 rlAnnoRankedList<- splitVia(rankWindows(rl_withGenes),10,"strata")
 ```
 
-As expected, the metaplot for all peaks produces a very noisy plot. The other two metaplots are more like those which we might see when analyzing protein coding genes (like NFE2L2 or BCRA1). However, the peaks are more normally distributed around the TSS and produce a curve which is "flatter" than what a protein coding gene might produce.
+vAPPENDIX As expected, the metaplot for all peaks produces a very noisy plot.
+The other two metaplots are more like those which we might see when analyzing protein coding genes (like NFE2L2 or BCRA1).
+However, the peaks are more normally distributed around the TSS and produce a curve which is "flatter" than what a protein coding gene might produce.
 
-After transcription, if the nascent RNA had been modified, (ie. spliced, capped and tailed), the annealing of the RNA to the DNA template would displace regions which had previously coded the premature RNA's exons. These displaced regions form loops which are known as R-loops[1]. 
+After transcription, if the nascent RNA had been modified, (ie. spliced, capped and tailed), the annealing of the RNA to the DNA template would displace regions which had previously coded the premature RNA's exons.
+These displaced regions form loops which are known as R-loops[1].
 
-R-loops will form across the whole length of a gene being transcribed, and so r-loops will align at windows close to a TSS, but also in surrounding regions since the DNA template for these genes may span at least thousands of base pairs. This may explain the "flatter" curve presented by the metaplots of rl_cons_60 and the top 12 ranges. 
+R-loops will form across the whole length of a gene being transcribed, and so r-loops will align at windows close to a TSS, but also in surrounding regions since the DNA template for these genes may span at least thousands of base pairs.
+This may explain the "flatter" curve presented by the metaplots of rl_cons_60 and the top 12 ranges.
 
-Knowing this, I would expect the see groups of windows with higher percent scores present increasingly flat curves - if more peaks align to the higher scoring windows, then there should be more peaks which are further upstream from the TSS. Windows with lower percent scores would produce curves which are just noise, as in the first meta plot.
+Knowing this, I would expect the see groups of windows with higher percent scores present increasingly flat curves - if more peaks align to the higher scoring windows, then there should be more peaks which are further upstream from the TSS.
+Windows with lower percent scores would produce curves which are just noise, as in the first meta plot.
 
-I repeat the process for percent levels, where each level increases 10 points. Windows with a percent score less than 10% are omitted from this point forward. 
-
+I repeat the process for percent levels, where each level increases 10 points.
+Windows with a percent score less than 10% are omitted from this point forward.
 
 ```{r}
 returntagmatrix <- TRUE 
@@ -256,7 +287,10 @@ upsetplots <- FALSE
 permfigs <- FALSE
 ```
 
-# Percent metaplots {.tabset}
+# Percent metaplots THROW IN APPENDIX {.tabset}
+
+change headings
+
 ```{r, echo=FALSE, results='asis', cache=FALSE}
 
 levelsMetaplots <- lapply(names(rl_listTagMatricies), function(groupNow){
@@ -269,22 +303,28 @@ cat(unlist(levelsMetaplots), sep = "\n")
 #lapply(rl_list, returnTagMatrix)
 
 ```
-#
+
+# 
 
 X labels describe the range of percent score of each plot.
 
-My hypothesis was incorrect. Instead of the curve becoming more flat as I plotted higher scoring windows, each group after 40% showed a simlar curve, normally distributed around the TSS. The same remarks hold true for the higher scoring groups, that peaks would be found at and near the TSS. But as the percent score increases, there doesn't appear to be any change in where peaks are located. 
+My hypothesis was incorrect.
+Instead of the curve becoming more flat as I plotted higher scoring windows, each group after 40% showed a simlar curve, normally distributed around the TSS.
+The same remarks hold true for the higher scoring groups, that peaks would be found at and near the TSS.
+But as the percent score increases, there doesn't appear to be any change in where peaks are located.
 
-I was also incorrect with lower scoring windows. Between percent scores of 0-39%, curves are inversions of what is seen with higher scoring peaks. 
+I was also incorrect with lower scoring windows.
+Between percent scores of 0-39%, curves are inversions of what is seen with higher scoring peaks.
 It seems then that lesser conserved r-loops are unlikely to be found near the TSS of a gene and more conserved r-loops are more likely to be found near the TSS.
-
 
 # Strata metaplots {.tabset}
 
-Following this, the whole set of windows were ranked in ascending order of percent score, then split into 10 groups, each with an equal number of windows. Metaplots were then generated from these new groups. 
+Following this, the whole set of windows were ranked in ascending order of percent score, then split into 10 groups, each with an equal number of windows.
+Metaplots were then generated from these new groups.
 
 ```{r, echo=FALSE, results='asis', cache=FALSE}
 
+#hard coded
 strataMetaplots <- lapply(names(rl_strataTagMatricies)[1:10], function(groupNow){
   setNow <- rl_strataTagMatricies[[groupNow]]
   knitr::knit_child('plotGeneration.Rmd', envir = environment(), quiet = TRUE)
@@ -296,16 +336,18 @@ cat(unlist(strataMetaplots), sep = "\n")
 
 ```
 
-#
+# 
 
-The same trend shown by the metaplots of the percent level groups is true for the group of strata as well; lower percent scoring windows tend to be further from the TSS compared to higher percent scoring windows. However, a large portion of the whole set of windows are located hundreds of base pairs from a TSS.
+The same trend shown by the metaplots of the percent level groups is true for the group of strata as well; lower percent scoring windows tend to be further from the TSS compared to higher percent scoring windows.
+However, a large portion of the whole set of windows are located hundreds of base pairs from a TSS.
 
-This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs). Given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a discrepancy between higher and lower scoring windows in their relationship to RLFRs?
-
+This raises the question of whether this large portion of windows, as well as the whole set of windows, are located near r-loop forming regions(RLFRs).
+Given that - unlike lower percent scoring windows - higher percent scoring windows tend to be close to a TSS, could there exist a discrepancy between higher and lower scoring windows in their relationship to RLFRs?
 
 # Permutation tests {.tabset}
 
-To explore the previous question, a permutation test over rl_cons is run against a region set describing r-loop forming regions. This was done first on the whole set of windows,
+To explore the previous question, a permutation test over rl_cons is run against a region set describing r-loop forming regions.
+This was done first on the whole set of windows,
 
 ```{r,echo=FALSE, fig.show="hold", message=FALSE, warning=FALSE, cache=TRUE, out.width="50%"}
 plot(rl_consPermTestResults[[1]])
@@ -316,6 +358,7 @@ plot(rl_consPermTestResults[[2]])
 As well as each strata.
 
 Figures are displayed in ascending order of percent score:
+THROW TABS INTO APPENDIX; CREATE GRID FOR Z SCORES via ggarange
 
 ```{r,echo=FALSE,results='asis'}
 
@@ -323,6 +366,7 @@ upsetplots <- FALSE
 returntagmatrix <- FALSE
 permfigs <- TRUE
 
+#hard coded 
 strataPermFigs <- lapply(names(rl_strataPermTestResults)[1:10], function(groupNow){
   knitr::knit_child('plotGeneration.Rmd', envir = environment(), quiet = TRUE)
 })
@@ -333,27 +377,29 @@ cat(unlist(strataPermFigs), sep = "\n")
 
 ```
 
-#
+# 
 
-In reviewing the results of the test for rl_cons it can no longer be assumed that there is no relationship between the whole set of windows and r-loop forming regions (given a significance threshold of 0.05). The same can also be said for each strata in the ranked set.
+In reviewing the results of the test for rl_cons it can no longer be assumed that there is no relationship between the whole set of windows and r-loop forming regions (given a significance threshold of 0.05).
+The same can also be said for each strata in the ranked set.
 
 The z score tends to increase with the percent score of each strata.
 
 Local z score across the first six strata (10-23% score) appear to show some fluctuation but there is no indication that the exact location of these windows have an association with the set of r-loop forming regions.
-This could be due to the large size of the windows. The remaining 4 strata, with the last one in particular begin to show a notable peak in the local z-score, which may indicate a more legitimate relationship between these windows and the set of RLFRs.
+This could be due to the large size of the windows.
+The remaining 4 strata, with the last one in particular begin to show a notable peak in the local z-score, which may indicate a more legitimate relationship between these windows and the set of RLFRs.
 
 # Peak annotation and upset plots {.tabset}
 
-Following this, I annotated the windows (according to percent levels) and used upset plots to display the data. From our understanding of R-loops, I would expect that higher scoring windows would have a greater amount of peaks which span all of 3' and 5' untranslated regions (UTR), promoter, exons and introns. Lower scoring groups would have most peaks overlapping 1 or two of these regions. 
-
-```{r}
-permfigs <- FALSE 
-upsetplots <- TRUE
-```
-
+Following this, I annotated the windows (according to percent levels) and used upset plots to display the data.
+From our understanding of R-loops, I would expect that higher scoring windows would have a greater amount of peaks which span all of 3' and 5' untranslated regions (UTR), promoter, exons and introns.
+Lower scoring groups would have most peaks overlapping 1 or two of these regions.
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
+#libraries at begining
 library(ggupset)
+
+permfigs <- FALSE 
+upsetplots <- TRUE
 
 annotateAndUpset <- function(ranges){
   #function takes GRanges list and generates upset plots for each object in the list
@@ -372,14 +418,17 @@ upsetresults <- lapply(names(rl_list), function(groupNow){
 cat(unlist(upsetresults), sep = '\n')
 ```
 
-#
-My hypothesis seems to hold true per the upset plots; higher scoring windows have more peaks which span the 5 relevant regions (introns, exons, promoters, 3' and 5' UTRs), whereas lower scoring peaks have fewer peaks spanning the 5 regions. This divide between higher and lower scoring windows is the same as the meta plots - after a 40% score, there is appears to be a divide in the trends which each group shows. 
+# 
+
+My hypothesis seems to hold true per the upset plots; higher scoring windows have more peaks which span the 5 relevant regions (introns, exons, promoters, 3' and 5' UTRs), whereas lower scoring peaks have fewer peaks spanning the 5 regions.
+This divide between higher and lower scoring windows is the same as the meta plots - after a 40% score, there is appears to be a divide in the trends which each group shows.
 
 # Gene data tables
 
 Data tables storing genetic information (start, end, width, name and description) for genes contained by each window are stored in the repository and are too large to display here.
 
 Data tables were generated for each percent level and strata
+
 ```{r, echo=FALSE, include=TRUE, results='hide', warning=FALSE,message=FALSE}
 
 lapply(rlAnnoList,gene_table)
@@ -389,16 +438,6 @@ lapply(rlAnnoList,gene_table)
 ```{r echo=FALSE, include=TRUE, results='hide', message=FALSE,warning=FALSE}
 
 lapply(rlAnnoRankedList, gene_table)
-```
-
-```{r,message=FALSE}
-library(enrichR)
-setEnrichrSite("Enrichr")
-websiteLive<- TRUE
-
-if(is.null(listEnrichrDbs()))
-  print("DATABASES ARE NULL")
-  websiteLive<-FALSE
 ```
 
 # Enrichment analysis (percent levels) {.tabset}
@@ -431,7 +470,6 @@ names(enrichLinksLevels) <- names(dataLst0)
 #for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
 
-
 ```{r childRMD0, echo=FALSE, results='asis', cache=FALSE}
 res0 <- lapply(names(dataLst0), function(groupNow) {
   genesNow <- dataLst0[[groupNow]]
@@ -443,9 +481,7 @@ res0 <- lapply(names(dataLst0), function(groupNow) {
 cat(unlist(res0), sep = '\n')
 ```
 
-
 # Enrichment analysis (strata) {.tabset}
-
 
 ```{r}
 dataLst <- list(
@@ -473,7 +509,6 @@ names(enrichLinksStrata) <- names(dataLst)
 #for(i in enrichLinks){print(paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",i$shortId))}
 ```
 
-
 ```{r childRMD, echo=FALSE, results='asis', cache=FALSE}
 res <- lapply(names(dataLst), function(groupNow) {
   genesNow <- dataLst[[groupNow]]
@@ -485,34 +520,43 @@ res <- lapply(names(dataLst), function(groupNow) {
 cat(unlist(res), sep = '\n')
 ```
 
-
-
 # General observations:
-Many of the higher ranking pathways within each conservation group play a role in cell differentiation or cell cycle progression. As well, many of these pathways are implicated in the regulation of tumor suppressing or proliferating pathways. 
+
+Many of the higher ranking pathways within each conservation group play a role in cell differentiation or cell cycle progression.
+As well, many of these pathways are implicated in the regulation of tumor suppressing or proliferating pathways.
 
 A trend within the overall data set is that there is a decrease in the number of enriched pathways as percent score decreases.
 
 # Discussion/Conclusion
-Using the percent score as a metric for what is a highly conserved R loop proves to be an effective tool which aligns with what we currently know about r-loops. Windows with higher percent scores are more likely to share characteristics which are expected of r-loop regions. High percent scoring windows are more likely to be closer to the TSS of gene and still have a notable presence surrounding it. Conversely, lower percent scoring windows have little presence near the TSS.
-  Upset plots show a similar distinction between lower percent scoring windows and high percent scoring windows; as the percent score increases there is a greater presence of peaks which overlap whole genes. This is expected as the region which r-loops span may overlap large portions of a gene on a template strand. 
-  Finally, we see that pathwys which are implicated in r-loop formation - such as the M phase and transcription and translational roles - are more present in windows with higher percent scores. 
 
-From here there are several avenues on which to continue this sort of work. Some next steps might be to analyze  how r-loops are conserved among different species. Another might be to analyze the correlation between conserved genes and r-loops which may form from them - this idea comes the the presence of the Rho GTPase pathway in many percent score groups. 
-  More over, one could explore the presence of neuronal pathways in less conserved r-loops, as r-loops are implicated in many neurological diseases [1]. 
-  Finally, one could look at the difference in CG content between lesser and highly conserved r-loops. R-loops are found to form over unmethylated CpG islands [4] (which are characteristic of euchromatic regions) and so perhaps this may be another characteristic of highly conserved r-loops.
-  
-Although the analysis has been fruitful, the late addition of the permutation test points to a flaw in the current approach - the 10kb sized windows. The large size may be too encompassing of the r-loop data, which was used here, to indicate any biologically significant relationship with r-loop forming regions. Further work may explore smaller sized windows.   
+Using the percent score as a metric for what is a highly conserved R loop proves to be an effective tool which aligns with what we currently know about r-loops.
+Windows with higher percent scores are more likely to share characteristics which are expected of r-loop regions.
+High percent scoring windows are more likely to be closer to the TSS of gene and still have a notable presence surrounding it.
+Conversely, lower percent scoring windows have little presence near the TSS.
+Upset plots show a similar distinction between lower percent scoring windows and high percent scoring windows; as the percent score increases there is a greater presence of peaks which overlap whole genes.
+This is expected as the region which r-loops span may overlap large portions of a gene on a template strand.
+Finally, we see that pathwys which are implicated in r-loop formation - such as the M phase and transcription and translational roles - are more present in windows with higher percent scores.
+
+From here there are several avenues on which to continue this sort of work.
+Some next steps might be to analyze how r-loops are conserved among different species.
+Another might be to analyze the correlation between conserved genes and r-loops which may form from them - this idea comes the the presence of the Rho GTPase pathway in many percent score groups.
+More over, one could explore the presence of neuronal pathways in less conserved r-loops, as r-loops are implicated in many neurological diseases [1].
+Finally, one could look at the difference in CG content between lesser and highly conserved r-loops.
+R-loops are found to form over unmethylated CpG islands [4] (which are characteristic of euchromatic regions) and so perhaps this may be another characteristic of highly conserved r-loops.
+
+Although the analysis has been fruitful, the late addition of the permutation test points to a flaw in the current approach - the 10kb sized windows.
+The large size may be too encompassing of the r-loop data, which was used here, to indicate any biologically significant relationship with r-loop forming regions.
+Further work may explore smaller sized windows.
 
 It is important to note that any trend extracted from analyzing the 70-100% percent scoring groups may have a bias due to their sample size (there are about 2000 windows with a percent score greater than 70).
 
+ctrl shift f8 for better citations
 
+1.  <https://www.sciencedirect.com/science/article/pii/S1097276519300449#bib30>
+2.  <https://www.mechanobio.info/what-is-mechanosignaling/what-are-small-gtpases/what-are-rho-gtpases/>
+3.  <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3197203/>
+4.  <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4955522/>
+5.  <https://www.researchgate.net/post/Enrichr_what_value_of_combined_score_is_significant>
+6.  <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-128>
 
-
-1. https://www.sciencedirect.com/science/article/pii/S1097276519300449#bib30
-2. https://www.mechanobio.info/what-is-mechanosignaling/what-are-small-gtpases/what-are-rho-gtpases/
-3. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3197203/
-4. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4955522/
-5. https://www.researchgate.net/post/Enrichr_what_value_of_combined_score_is_significant
-6. https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-128
-
-
+[@Chedin2020]
