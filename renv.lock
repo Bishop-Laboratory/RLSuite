@@ -277,14 +277,26 @@
     "RLHub": {
       "Package": "RLHub",
       "Version": "0.99.4",
-      "Source": "Bioconductor",
-      "Hash": "b1bfacd0427a9b7dff06e87196f0ec1f"
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "RLHub",
+      "RemoteUsername": "Bishop-Laboratory",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "eb51b623bd38aaed37bed40a714b924b46ce65ee",
+      "Hash": "1c8b575f0e69dfd4728ea6b205d80421"
     },
     "RLSeq": {
       "Package": "RLSeq",
       "Version": "0.99.6",
-      "Source": "Bioconductor",
-      "Hash": "2d719ce3bad521e55c0a5ae73c6f1bcf"
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "RLSeq",
+      "RemoteUsername": "Bishop-Laboratory",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "e8b1b8f3c4e08ee69c13256decb80c55b01272c1",
+      "Hash": "60da82af38b055d068559e47a8f86a90"
     },
     "RSQLite": {
       "Package": "RSQLite",

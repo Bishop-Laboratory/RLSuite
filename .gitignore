@@ -11,7 +11,9 @@ R-package/run_vars.json
 renv/
 RSeq_out*
 *.fastq
+*.png
 *.bam
+.Rprofile
 *.bw
 *.bedGraph
 venv/
