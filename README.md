@@ -7,24 +7,34 @@ figures and analyses from the *RLSuite* manuscript.
 
 To re-create the figures from the manuscript, do the following:
 
-1. Open R/RStudio and restore the `renv`
+1. Clone the repo
 
-```R
+```shell
+git clone https://github.com/Bishop-Laboratory/RLSuite.git
+cd RLSuite/
+```
+
+2. Restore the `renv`
+
+```shell
 R -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv")'
 R -e 'renv::restore()'
 ```
 
-2. Install `RLHub` and `RLSeq` from GitHub
+3. Install `RLHub` and `RLSeq` from GitHub
 
 ```shell
 R -e 'remotes::install_github("Bishop-Laboratory/RLHub", upgrade = "never")'
 R -e 'remotes::install_github("Bishop-Laboratory/RLSeq", upgrade = "never")'
 ```
 
-3. Run the script
+4. Run the script
 
 ```shell
 Rscript figures.R
 ```
 
+## Other
+
+If any issues arise or anything is unclear, please submit an [issue](https://github.com/Bishop-Laboratory/RLSuite/issues).
 
