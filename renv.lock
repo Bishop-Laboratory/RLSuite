@@ -360,9 +360,9 @@
     },
     "SummarizedExperiment": {
       "Package": "SummarizedExperiment",
-      "Version": "1.23.4",
+      "Version": "1.23.5",
       "Source": "Bioconductor",
-      "Hash": "55002a8cf7438d46415ae273aa125139"
+      "Hash": "1c10dc81d2662e5e5f13f9e17955afdd"
     },
     "TxDb.Hsapiens.UCSC.hg38.knownGene": {
       "Package": "TxDb.Hsapiens.UCSC.hg38.knownGene",
