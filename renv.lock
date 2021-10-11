@@ -76,9 +76,9 @@
     },
     "BiocParallel": {
       "Package": "BiocParallel",
-      "Version": "1.27.10",
+      "Version": "1.27.16",
       "Source": "Bioconductor",
-      "Hash": "5168cead7182637e3388f9f6517f9dc3"
+      "Hash": "d90f087139d52bae7858f16fd11b24f3"
     },
     "BiocVersion": {
       "Package": "BiocVersion",
