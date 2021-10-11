@@ -107,9 +107,9 @@
     },
     "DESeq2": {
       "Package": "DESeq2",
-      "Version": "1.33.4",
+      "Version": "1.33.5",
       "Source": "Bioconductor",
-      "Hash": "11c524fc4cfb2b58499eb6bc385dd809"
+      "Hash": "000472c9781bc6452461c3ce1dc0d91e"
     },
     "DT": {
       "Package": "DT",
