@@ -340,9 +340,9 @@
     },
     "S4Vectors": {
       "Package": "S4Vectors",
-      "Version": "0.31.3",
+      "Version": "0.31.5",
       "Source": "Bioconductor",
-      "Hash": "e385c69075c4bddb3c0c7569bdbf3722"
+      "Hash": "9206a5b29c546ee03f3c014ac5716c55"
     },
     "SQUAREM": {
       "Package": "SQUAREM",

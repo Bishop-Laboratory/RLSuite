@@ -34,7 +34,7 @@ R -e 'remotes::install_github("Bishop-Laboratory/RLSeq", upgrade = "never")'
 Rscript figures.R
 ```
 
-## Other
+## Troubleshooting
 
 If any issues arise or anything is unclear, please submit an [issue](https://github.com/Bishop-Laboratory/RLSuite/issues).
 
