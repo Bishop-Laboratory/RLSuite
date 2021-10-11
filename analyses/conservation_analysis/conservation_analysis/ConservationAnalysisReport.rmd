@@ -32,15 +32,7 @@ In the analysis I work with a set of 10 kilo-basepair windows - `rl_cons`.
 Each window is scored based on the number of r-loops which it overlaps with.
 
 ```{r libraries}
-
 library(tidyverse)
-library(ChIPpeakAnno)
-library(ChIPseeker)
-library(ReactomePA)
-library(DT)
-library(rtracklayer)
-library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-
 ```
 
 
@@ -396,7 +388,6 @@ Lower scoring groups would have most peaks overlapping 1 or two of these regions
 
 ```{r,echo=FALSE,fig.show="hold", out.width="30%", message=FALSE}
 #libraries at begining
-library(ggupset)
 
 permfigs <- FALSE 
 upsetplots <- TRUE

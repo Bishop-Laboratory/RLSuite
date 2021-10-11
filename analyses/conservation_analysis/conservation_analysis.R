@@ -1,6 +1,4 @@
 ##### Correlation analysis #####
-library(tidyverse)
-library(ChIPpeakAnno)
 
 # Get the metadata
 sample_metadata <- read_csv("misc/rmap_full_11_25.csv")
@@ -191,13 +189,6 @@ if(length(upperbound) == length(lowerbound)){
 ##Enrichment Analysis 
 
 #Setting up enrichR
-library(enrichR)
-setEnrichrSite("Enrichr")
-websiteLive<- TRUE
-
-if(is.null(listEnrichrDbs()))
-  print("DATABASES ARE NULL")
-  websiteLive<-FALSE
 
 #ChEA database was used to create datables 
 

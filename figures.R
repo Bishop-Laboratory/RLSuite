@@ -4,6 +4,7 @@ library(tidyverse)
 library(kableExtra)
 library(tidymodels)
 library(VennDiagram)
+library(plotly)
 library(ggprism)
 
 # Load data from RLHub
@@ -29,91 +30,44 @@ futile.logger::flog.threshold(futile.logger::ERROR, name = "VennDiagramLogger")
 ### RLBase data
 
 ## Get the summary of the datasets ##
-
-# Breakdown of dataset categorical variables
-toTbl <- rlsamples %>%
-  group_by(mode, genome) %>%
+agsmall <- RLSeq:::available_genomes %>% dplyr::select(genome=UCSC_orgID, Organism=organism)
+rlsamplesNow <- rlsamples
+modeDat <-  dplyr::mutate(rlsamplesNow, Mode = ifelse(mode %in% RLSeq:::auxdata$mode_cols$mode, mode, "misc")) %>%
+  group_by(Mode) %>% tally()
+genDat <- dplyr::rename(rlsamplesNow, Genome = genome) %>% group_by(Genome) %>% tally()
+labelDat <- dplyr::rename(rlsamplesNow, Label = label) %>% group_by(Label) %>% tally()
+predDat <- dplyr::rename(rlsamplesNow, Prediction = prediction) %>% 
+  group_by(Prediction) %>%
   tally() %>%
-  pivot_wider(id_cols = genome, names_from = mode, values_from = n, values_fill = 0) %>%
-  column_to_rownames(var = "genome") %>%
-  t() 
-cbind(colSums(toTbl),
-      rep(" ", length(colSums(toTbl)))) %>%
-  t() %>%
-  cbind(data.frame(names = c("Sum", "Mode"))) %>%
-  mutate(names = cell_spec(
-    names, format = "html", bold = names == "Mode"
-  )) %>%
-  column_to_rownames("names") %>%
-  rbind(toTbl) %>%
-  kable(format = "html", booktabs=T, 
-        caption = "Number of samples by Mode, Genome",
-        escape = FALSE, align = "r") %>%
-  kableExtra::kable_styling()
-
-
-NAME_SEP <- "__xXx__"
-toTbl <- rlsamples %>%
-  group_by(mode, genome, label) %>%
-  tally() %>%
-  pivot_wider(id_cols = c(mode),
-              names_from = c(genome, label),
-              values_from = n, names_sep = NAME_SEP,
-              names_sort = TRUE, values_fill = 0) %>%
-  column_to_rownames("mode")
-cnms1 <- gsub(colnames(toTbl), 
-              pattern = paste0('(.+)', NAME_SEP, "(.+)"), replacement = "\\1")
-cnms2 <- gsub(colnames(toTbl), 
-              pattern = paste0('(.+)', NAME_SEP, "(.+)"), replacement = "\\2")
-toMerge <- match(unique(cnms1), cnms1)
-mergeVec <- sapply(seq(toMerge), function(i) {
-  if (i == length(seq(toMerge))) {
-    ret <- toMerge[i]:length(cnms1)
-    length(ret) 
+  mutate(Prediction = ifelse(is.na(Prediction), "No Peaks", Prediction))
+datList <- list("Mode"=modeDat, "Label"=labelDat, "Prediction"=predDat, "Genome"=genDat)
+outpath <- "results/RLBase_descriptive_analysis/"
+dir.create(outpath, showWarnings = FALSE)
+old_path <- Sys.getenv("PATH")
+Sys.setenv(PATH = paste(old_path, "/home/millerh1/miniconda3/bin/orca", sep = ":"))
+pltLst <- lapply(names(datList), function(dat) {
+  dataNow <- datList[[dat]]
+  if (dat != "Genome") {
+    cs <- RLSeq:::auxdata[[paste0(tolower(dat), "_cols")]]
+    mark <- list(colors=setNames(cs[,'col', drop=TRUE], nm=cs[,tolower(dat),drop=TRUE])[dataNow[,dat,drop=T]])
   } else {
-    ret <- toMerge[i]:toMerge[i+1]
-    length(ret[-length(ret)])
+    mark <- NULL
   }
+  plt <- plot_ly(type = "pie") %>%
+    add_pie(data=dataNow, labels = dataNow[,dat,drop=T], values = ~n, textinfo='label+value',
+            marker = mark, 
+            insidetextorientation='horizontal', hole=.6, rotation=250) %>%
+    layout(showlegend = FALSE, title=list(text = dat, x=0.15), margin = list(l = 100, r = 100, t=100, b=100),
+           xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+           yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+  save_image(plt, file = file.path(outpath, paste0("donut__", dat, ".svg")), format = "svg")
+  
 })
-names(mergeVec) <- unique(cnms1)
-mergeVec <- c(" " = 1, mergeVec)
+names(pltLst) <- names(datList)
 
-cbind(colSums(toTbl),
-      rep(" ", length(colSums(toTbl)))) %>%
-  t() %>%
-  cbind(data.frame(names = c("Sum", "Mode"))) %>%
-  mutate(names = cell_spec(
-    names, format = "html", bold = names == "Mode"
-  )) %>%
-  column_to_rownames("names") %>%
-  rbind(toTbl) %>%
-  kable(toTbl, 
-        format = "html", 
-        caption = "Number of samples by Mode, Condition, Genome",
-        escape = FALSE,
-        align = "r",
-        booktabs = T,
-        col.names = cnms2) %>%
-  add_header_above(mergeVec) %>%
-  kableExtra::kable_styling()
 
-## Scatter pie charts
+
 # Mode
-forPie <- rlsamples %>%
-  mutate(mode = case_when(
-    mode %in% RLSeq:::auxdata$mode_cols$mode ~ mode,
-    TRUE ~ "misc"
-  )) %>%
-  group_by(mode) %>%
-  tally() %>%
-  left_join(RLSeq:::auxdata$mode_cols, by = "mode") %>%
-  mutate(label = paste0(
-    mode, "\n", round(100*n/sum(n), 1), "%\n(", n, ")"
-  )) %>%
-  sample_frac()
-pie(forPie$n, labels = forPie$label, 
-    clockwise = F, init.angle = 150, cex = .77,  
-    col = forPie$col)
 
 # Genome
 forPie <- rlsamples %>%
