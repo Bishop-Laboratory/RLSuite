@@ -5,7 +5,15 @@ R-package/.Rhistory
 R-package/RSeq_out
 *.snakemake*
 *RSeq.Rproj*
+venv/
+*meme_res*
+*mats/
+*.fasta
+*.tgz
 .Rproj.user
+*databases/
+*.gz
+*.bed
 .idea
 R-package/run_vars.json
 renv/
