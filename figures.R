@@ -226,12 +226,18 @@ ComplexHeatmap::draw(chm)
 dev.off()
 
 # Num peaks across conditions 
-plt <- rlsamples %>%
-  filter(prediction == "POS" & label == "POS") %>%
+pltdat <- rlsamples %>%
+  filter(label == "POS") %>%
   mutate(numPeaks = numPeaks / 1000) %>%
   group_by(mode) %>%
-  mutate(numpeakmed = median(numPeaks)) %>%
-  ungroup() %>%
+  mutate(numpeakmed = median(numPeaks, na.rm = TRUE)) %>%
+  ungroup()
+ord <- pltdat %>%
+  group_by(mode) %>%
+  summarise(npeak = mean(numPeaks))
+ord
+plt <- pltdat %>%
+  filter(! is.na(numPeaks)) %>%
   arrange(numpeakmed) %>%
   mutate(mode = factor(mode, levels = unique(mode))) %>%
   ggplot(mapping = aes(x = mode, fill = mode,
@@ -287,7 +293,7 @@ tribble(
 # bamCoverage -b "bam/SRX1025896/SRX1025896_hg38.bam" -o coverage_scaled/SRX1025896_hg38.scale.bw --scaleFactor 0.7183404 -p 44 -e 294 --ignoreDuplicates
 # bamCoverage -b "bam/SRX2683605/SRX2683605_hg38.bam" -o coverage_scaled/SRX2683605_hg38.scale.bw --scaleFactor 0.6507813 -p 44 -e 296 --ignoreDuplicates
 # bamCoverage -b "bam/SRX2675009/SRX2675009_hg38.bam" -o coverage_scaled/SRX2675009_hg38.scale.bw --scaleFactor 0.9435923 -p 44 -e 260 --ignoreDuplicates
-
+cons
 ### Figure 2/S2 - Prediction validation ###
 
 dir.create("results/Figure_2", showWarnings = FALSE)
@@ -456,9 +462,9 @@ dataNow <- rlsamples %>%
     numPeaks > 5000,
     ip_type %in% c("S9.6", "dRNH")
   ) %>%
-  group_by(ip_type) %>%
+  group_by(ip_type, study) %>%
   tally()
-
+dataNow
 ip_cols <- c("dRNH" = "#c386c4", "S9.6"="#82d0e8")
 
 lt <- plot_ly(type = "pie") %>%
@@ -1035,6 +1041,10 @@ consInt <- lapply(cons, function(x) {
 }) %>% bind_rows()
 
 # Annotate TTS, TSS, and Gene Body
+txfeat_cols <- setNames(
+  rev(c("#b36262", "#c4cc6a", "#d17bdb", "#4bc6d6", "#83d647", "#9494e3", "#7d7d7d")),
+  nm = rev(c("TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS", "Intergenic"))
+)
 txfeats <- annFull[sapply(names(annFull), function(x) grepl(x, pattern = "Transcript_Features.*"))]
 txfeats <- lapply(names(txfeats), function(txname) {
   x <- txfeats[[txname]]
@@ -1075,10 +1085,7 @@ plt <- oltxres %>%
   coord_flip() +
   ylab("Peak location (%)") +
   xlab(NULL) +
-  scale_fill_manual(values = setNames(
-    rev(c("#b36262", "#c4cc6a", "#d17bdb", "#4bc6d6", "#83d647", "#9494e3", "#7d7d7d")),
-    nm = rev(c("TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS", "Intergenic"))
-  ), guide = guide_legend(title = "Feature", reverse = TRUE))
+  scale_fill_manual(values = txfeat_cols, guide = guide_legend(title = "Feature", reverse = TRUE))
 plt
 
 # Plot gene distribution
@@ -1334,9 +1341,235 @@ pltdats2 %>%
   })
 
 
+### Figure 6: Conserved vs Variable ###
+
+dir.create("results/Figure_6", showWarnings = FALSE)
+
+## Define conserved vs variable
+# Due to a mistake in the conservation score, we need to use a scaling factor
+# and convert it. 61 divisor for dRNH and 270 divisor for S9.6
+# Original (flawed) calc divided number (N) of samples overlapping with 
+# windows by the divisor instead of the proper scaling factor (42, 184)
+# To reverse this, simply multiply by the divisor / proper factor
+scale_fact <- c("S9.6" = 270/184, "dRNH" = 61/42)
+# Apply scaling factor
+rlregions_cons <- rlregions %>%
+  mutate(
+    pct_cons = case_when(
+      source == "dRNH" ~ conservation_score * scale_fact['dRNH'],
+      source == "S9.6" ~ conservation_score * scale_fact['S9.6'],
+      TRUE ~ conservation_score * mean(scale_fact)
+    )
+  ) %>%
+  arrange(desc(pct_cons)) %>%
+  mutate(rank = row_number()) %>%
+  mutate(quant = case_when(
+    pct_cons > 60 ~ "60-100%",
+    pct_cons > 40 ~ "40-60%",
+    pct_cons > 26 ~ "26-40%",
+    pct_cons > 20 ~ "20-26%",
+    TRUE ~ "15-20%"
+  ))
+
+## Summit the peaks (we need to transfer summits from the dRNH and S9.6 consensus sites)
+consSum <- consInt %>%
+  select(chrom, so, eo, source, start, end, peak, name) %>%
+  distinct(name, .keep_all = T)
+locpat <- "(.+):(.+)-(.+):(.+)"
+rlregions_cons <- rlregions_cons %>%
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    so = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    eo = as.numeric(gsub(location, pattern = locpat, replacement = "\\3")),
+    strand = gsub(location, pattern = locpat, replacement = "\\4")
+  )
+rljoin <- inner_join(rlregions_cons, consSum, by = c("chrom", "so")) %>%
+  mutate(source = source.x)
+rljoin <- rljoin %>% distinct(rlregion, .keep_all = TRUE)
+
+## Percent conservation rank plot
+quant_cols <- c(
+  "60-100%" = "#5e03fc",
+  "40-60%" = "#a678f5",
+  "26-40%" = "#a89ff5",
+  "20-26%" = "#bdcdff",
+  "15-20%" = "#c3e4f7"
+)
+plt <- rljoin %>%
+  ggplot(aes(x = rank, y = pct_cons, color = quant)) +
+  geom_hline(yintercept = 50, color = "grey", linetype = "dashed") +
+  geom_point() +
+  scale_x_reverse() +
+  geom_rug(
+    # sides = "b"
+  ) +
+  ylab("Conservation across samples (%)") +
+  xlab("RL region rank") +
+  scale_color_manual(values = quant_cols) +
+  guides(color = guide_legend(title = "Percentile range")) +
+  theme_bw(base_size = 16)
+plt
+ggsave(plt, filename = "results/Figure_6/pct_cons_ranks.svg", height = 6, width = 9)
+
+## Ridge plot of conservation
+plt <- rlregions_cons %>%
+  arrange(desc(pct_cons)) %>%
+  mutate(source = ifelse(source == "dRNH S96", "Both", ifelse(source == "S96", "S9.6", "dRNH")),
+         source = factor(source, levels = c("S9.6", "dRNH", "Both"))) %>%
+  ggplot(aes(x = pct_cons, y = source, color = source, fill = source)) +
+  ggridges::geom_density_ridges(alpha = .6) +
+  ggridges::theme_ridges(font_size = 16) +
+  scale_x_log10(breaks = c(15, 20, 30, 50, 100)) +
+  scale_fill_manual(
+    values = c("Both" = "#6795C9", "dRNH" = "#C170AD", "S9.6" = "#0DBAE5")
+  ) +
+  scale_color_manual(
+    values = c("Both" = "#6795C9", "dRNH" = "#C170AD", "S9.6" = "#0DBAE5")
+  ) +
+  xlab("Conservation (%, log10)") +
+  ylab(NULL)
+plt
+ggsave(plt, filename = "results/Figure_6/pct_cons_ridges.svg")
+
+## Get the overlap stats with genomic
+oltx <- rljoin %>%
+  select(chrom, start, end, rlregion, source) %>%
+  valr::bed_intersect(txfeats)
+oltxsum <- oltx %>%
+  group_by(rlregion.x) %>%
+  summarise(
+    type = ifelse("TSS" %in% type.y, "TSS", 
+                  ifelse("TTS" %in% type.y, "TTS",
+                         ifelse("fiveUTR" %in% type.y, "fiveUTR", 
+                                ifelse("threeUTR" %in% type.y, "threeUTR", 
+                                       ifelse("Exon" %in% type.y, "Exon", "Intron")))))
+  ) %>%
+  dplyr::rename(rlregion = rlregion.x)
+oltxres <- oltxsum %>%
+  full_join(rljoin, by = "rlregion") %>%
+  mutate(type = ifelse(is.na(type), "Intergenic", type)) %>%
+  distinct(rlregion, .keep_all = TRUE)
+plt <- oltxres %>%
+  group_by(quant, type) %>%
+  tally() %>%
+  mutate(n = 100*n / sum(n),
+         type = factor(type, levels = rev(c(
+           "TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS", "Intergenic"
+         ))),
+         quant = factor(quant, levels = rev(unique(quant))))  %>%
+  ggplot(aes(x = quant, y = n, fill = type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_bw(base_size = 14) +
+  coord_flip() +
+  ylab("Peak location (%)") +
+  xlab(NULL) +
+  scale_fill_manual(values = txfeat_cols,
+                    guide = guide_legend(title = "Feature", reverse = TRUE)) +
+  scale_x_discrete(limits = rev)
+plt
+ggsave(plt, filename = "results/Figure_6/pct_cons_txfeats.svg")
+
+## Split regions by quantiles of conservation
+## Do Enrichment analysis
+# tssrls <- oltxres$rlregion[! oltxres$type %in% c("Intron", "Intergenic")]
+rllst <- rljoin %>%
+  group_by(quant) %>%
+  {setNames(group_split(.), nm = group_keys(.)[[1]])}
+rllstlinks <- pbapply::pblapply(
+  rllst,
+  function(x) {
+    gen <- x %>%
+      # filter(rlregion %in% tssrls) %>%
+      pull(allGenes)
+    genlst <- unique(unlist(strsplit(gen, ",")))
+    nm <- paste0("RL conservation - ", x$quant[1])
+    response <- httr::POST(  # Post request to enrichr based on https://maayanlab.cloud/Enrichr/help#api&q=1
+      url = 'https://maayanlab.cloud/Enrichr/addList', 
+      body = list(
+        'list' = paste0(genlst, collapse = "\n"),
+        'description' = nm
+      )
+    )
+    response <- jsonlite::fromJSON(httr::content(response, as = "text"))  # Collect response
+    permalink <- paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",  # Create permalink
+                        response$shortId[1])
+    return(permalink)
+  }
+)
+rllstlinks
+
+## Make barplots
+rllstenr <- pbapply::pblapply(
+  rllst,
+  function(x) {
+    gen <- x %>%
+      # filter(rlregion %in% tssrls) %>%
+      pull(allGenes)
+    genlst <- unique(unlist(strsplit(gen, ",")))
+    enrichR::enrichr(genes = genlst, databases = c("GO_Biological_Process_2021", "ChEA_2016",
+                                                   "KEGG_2021_Human", "MSigDB_Hallmark_2020"))
+  }
+)
+num_sel <- 5
+db <- "KEGG_2021_Human"
+# db <- "MSigDB_Hallmark_2020"
+# db <- "GO_Biological_Process_2021"
+terms <- lapply(names(rllstenr), function(x) {
+  rllstenr[[x]][[db]] %>%
+    as_tibble() %>%
+    # mutate(Combined.Score = as.numeric(scale(Combined.Score, center = FALSE))) %>%
+    slice_max(Combined.Score, n = num_sel) %>%
+    filter(row_number() <= num_sel) %>% pull(Term)
+})
+terms <- unique(unlist(terms))
+plttbl <- lapply(names(rllstenr), function(x) {
+  rllstenr[[x]][[db]] %>%
+    as_tibble() %>%
+    filter(Term %in% terms) %>%
+    mutate(quant = x) %>%
+    # mutate(Combined.Score = as.numeric(scale(Combined.Score, center = FALSE))) %>%
+    select(Term, quant, combined_score=Combined.Score, padj=Adjusted.P.value)
+}) %>% bind_rows()
+barplt <- plttbl %>%
+  mutate(combined_score = ifelse(! is.na(combined_score),
+                                 ifelse(combined_score < 1, 0, 
+                                        combined_score), 0)) %>%
+  arrange(quant, combined_score) %>% 
+  group_by(quant) %>%
+  mutate(
+    Term = gsub(Term, pattern = " [0-9]+ .+", replacement = ""),
+    Term = gsub(Term, pattern = " \\(GO.+", replacement = ""),
+    Term = stringr::str_wrap(Term, width = 45),
+  ) 
+plt <- barplt %>%
+  mutate(
+    Term = factor(Term,
+                  levels = unique(barplt$Term[barplt$combined_score != 0]))
+  ) %>%
+  filter(! is.na(Term)) %>%
+  ggplot(aes(x = Term, color = -log10(padj), size=combined_score, y = quant)) +
+  geom_point() +
+  # geom_col(position = position_dodge(.2)) +
+  coord_flip() +
+  theme_bw(base_size = 14) +
+  ylab("RL Region conservation percentile") +
+  xlab(NULL) +
+  scale_color_viridis_c(direction = -1, option = "A", end = .9,
+                        guide = guide_colorbar(title = "P adj (-log10)")) 
+plt
+ggsave(plt, filename = "results/Figure_6/path_enrich_tf.svg", height = 8, width = 6)
 
 
-### With Case vs Control vs RNH/nonRNH confusion matrix
+
+rlsamples %>%
+  
+
+
+
+############################### misc ###########################################
+
+
+position = position_raincloud(adjust_vlines = TRUE)### With Case vs Control vs RNH/nonRNH confusion matrix
 rmapfftsmall %>%
   mutate(Condition = ifelse(is_rnh_like, "RNH-like", "Normal"),
          Prediction = ifelse(prediction == "case", "Normal", "RNH-like")) %>%
