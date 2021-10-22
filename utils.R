@@ -220,7 +220,7 @@ plot_multi_feature <- function(features, db, pltdat, lmts, yb, factororder, axis
 }
 
 plot_multi_feature_iptype <- function(features, db, pltdat, lmts, factororder) {
-  
+  DODGE_POS <- .8
   data4plot <-  pltdat %>%
     as.list() %>%
     bind_rows() %>%
