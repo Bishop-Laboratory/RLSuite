@@ -1,3 +1,35 @@
+# Taken from https://github.com/cran/VennDiagram/blob/master/R/hypergeometric.test.R
+calculate.overlap.and.pvalue = function(list1, list2, total.size, lower.tail = TRUE, adjust = FALSE) {
+  
+  # calculate actual overlap
+  actual.overlap <- length(intersect(list1, list2));
+  
+  # calculate expected overlap
+  # need to cast to avoid integer overflow when length(list1) * length(list2) is extremely large
+  expected.overlap <- as.numeric(length(list1)) * length(list2) / total.size;
+  
+  adjust.value <- 0;
+  
+  # adjust actual.overlap to reflect P[X >= x]
+  if (adjust & !lower.tail) {
+    adjust.value <- 1;
+    warning('Calculating P[X >= x]');
+  }
+  
+  # calculate significance of the overlap
+  overlap.pvalue <- phyper(
+    q = actual.overlap - adjust.value,
+    m = length(list1),
+    n = total.size - length(list1),
+    k = length(list2),
+    lower.tail = lower.tail
+  );
+  
+  # return values
+  return( c(actual.overlap, expected.overlap, overlap.pvalue) );
+  
+}
+
 plot_single_feature <- function(feature, db, pltdat, lmts, yb) {
   
   # Define limits

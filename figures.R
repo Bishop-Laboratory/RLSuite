@@ -36,7 +36,6 @@ genes <- AnnotationDbi::select(
 
 # Create output directories
 dir.create("results", showWarnings = FALSE)
-dir.create(file.path("results", "tables"), showWarnings = FALSE)
 
 # Human genes
 humanGenes <- AnnotationDbi::select(
@@ -58,6 +57,32 @@ rlsamples %>%
     vars = c("genome", "mode", "ip_type", "label")
   ) %>%
   tableone::kableone() 
+
+## Table S1 -- RLBase samples
+dir.create("results/Table_S1", showWarnings = FALSE)
+rlsamples %>%
+  select(
+    `SRA Sample ID` = rlsample,
+    Prediction=prediction, 
+    Label=label,
+    `# of peaks` = numPeaks,
+    Mode=mode,
+    `IP Type`=ip_type,
+    Condition=condition,
+    Tissue=tissue,
+    Genotype=genotype,
+    Other=other,
+    PMID,
+    `Control Sample ID`=control,
+    `Read Length` = read_length,
+    `Paired End` = paired_end,
+    Stranded = strand_specific,
+    `Discarded during model building` = discarded,
+    `Peaks URL` = peaks_s3,
+    `Coverage URL` = coverage_s3,
+    `RLSeq Report URL` = report_html_s3
+  ) %>%
+  write_csv(file = "results/Table_S1/sample_catalog.csv")
 
 ## Fig. 1C RLFS plots
 dats <- tribble(
@@ -386,9 +411,9 @@ dir.create("results/Figure_3", showWarnings = FALSE)
 ## Genome Browser -- get scaling factors for bigWigs
 ## From https://www.biostars.org/p/413626/#414440
 rlcts <- RLHub::rlregions_counts()
-cts <- rlcts@assays@data$cts
-normFact <- edgeR::calcNormFactors(object = cts, method="TMM")
-libSize <- colSums(cts)
+cts_mat <- rlcts@assays@data$cts
+normFact <- edgeR::calcNormFactors(object = cts_mat, method="TMM")
+libSize <- colSums(cts_mat)
 sizeFactors <- normFact * libSize / 1000000
 sizeFactors.Reciprocal <- 1/sizeFactors
 sizeFactTbl <- tibble(
@@ -645,6 +670,42 @@ consInt <- lapply(cons, function(x) {
   return(xint)
 }) %>% bind_rows()
 
+# Same but with shared and not shared
+int <- valr::bed_intersect(s96_cons, drnh_cons)
+cons2 <- list(
+  "dRNH-only" = drnh_cons[! drnh_cons$name %in% int$name.y,],
+  "S9.6-only" = s96_cons[! s96_cons$name %in% int$name.x,],
+  "Shared" = int %>%
+    mutate(start = ifelse(start.x < start.y, start.x, start.y),
+           end = ifelse(end.x > end.y, end.x, end.y),
+           plx = start.x + peak.x,
+           ply = start.y + peak.y,
+           pl = (plx + ply) / 2,
+           peak = round(pl - start),
+           name = paste0("Shared__", row_number())) %>%
+    select(chrom, start, end, peak, name)
+)
+consInt2 <- lapply(cons2, function(x) {
+  # Call summits
+  x <- x %>%
+    dplyr::rename(so = start, 
+                  eo = end) %>%
+    mutate(
+      start = so + peak - 250,
+      end = so + peak + 250
+    )
+  # Annotate genes
+  xint <- x %>%
+    relocate(start, .after = chrom) %>%
+    relocate(end, .after = chrom) %>%
+    select(-so, -eo) %>%
+    valr::bed_intersect(y = genes) %>%
+    select(name = name.x, SYMBOL = SYMBOL.y) %>%
+    right_join(x, by = "name") 
+  
+  return(xint)
+}) %>% bind_rows()
+
 # Annotate TTS, TSS, and Gene Body
 txfeat_cols <- setNames(
   rev(c("#b36262", "#c4cc6a", "#d17bdb", "#4bc6d6", "#83d647", "#9494e3", "#7d7d7d")),
@@ -693,7 +754,55 @@ plt <- oltxres %>%
   scale_fill_manual(values = txfeat_cols, guide = guide_legend(title = "Feature", reverse = TRUE))
 ggsave(plt, filename = "results/Figure_4/consensus__txplot.svg")
 
+# With shared
+oltx2 <- consInt2 %>%
+  mutate(source = gsub(name, pattern = "(.+)__.+", replacement = "\\1")) %>%
+  select(chrom, start, end, name, source) %>%
+  valr::bed_intersect(txfeats)
+oltxsum2 <- oltx2 %>%
+  group_by(name.x) %>%
+  summarise(
+    type = ifelse("TSS" %in% type.y, "TSS", 
+                  ifelse("TTS" %in% type.y, "TTS",
+                         ifelse("fiveUTR" %in% type.y, "fiveUTR", 
+                                ifelse("threeUTR" %in% type.y, "threeUTR", 
+                                       ifelse("Exon" %in% type.y, "Exon", "Intron")))))
+  ) %>%
+  mutate(source = gsub(name.x, pattern = "(.+)__.+", replacement = "\\1"))
 
+oltxres2 <- oltxsum2 %>%
+  dplyr::rename(name = name.x) %>%
+  full_join(consInt2, by = "name") %>%
+  mutate(source = gsub(name, pattern = "(.+)__.+", replacement = "\\1")) %>%
+  select(name, source, type) %>%
+  mutate(type = ifelse(is.na(type), "Intergenic", type)) %>%
+  distinct(name, .keep_all = TRUE)
+plt <- oltxres2 %>%
+  group_by(source, type) %>%
+  tally() %>%
+  mutate(
+    n = 100*n / sum(n),
+    source = ifelse(
+      source == "dRNH", "dRNH-only",
+      ifelse(
+        source == "S96", "S9.6-only", source
+      )
+    ),
+    source = factor(source, levels = rev(c(
+      "dRNH-only", "S9.6-only", "Shared"
+    ))),
+    type = factor(type, levels = rev(c(
+      "TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS", "Intergenic"
+    )))
+   )  %>%
+  ggplot(aes(x = source, y = n, fill = type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_bw(base_size = 14) +
+  coord_flip() +
+  ylab("Peak location (%)") +
+  xlab(NULL) +
+  scale_fill_manual(values = txfeat_cols, guide = guide_legend(title = "Feature", reverse = TRUE))
+ggsave(plt, filename = "results/Figure_4/consensus__txplot_2.svg")
 
 # Check RLFS
 ol <- ChIPpeakAnno::findOverlapsOfPeaks(
@@ -745,7 +854,6 @@ pltpca <- pltdat %>%
   #                                      nm = RLSeq:::auxdata$mode_cols$mode)) +
   scale_color_manual(values = ip_cols) +
   theme_bw(base_size = 14) 
-pltpca
 ggsave(plot = pltpca, filename = "results/Figure_5/pca_plot.svg", height = 5, width = 7)
 
 ## Get differential RL Regions
@@ -1064,6 +1172,15 @@ rllstenr <- pbapply::pblapply(
                                                    "KEGG_2021_Human", "MSigDB_Hallmark_2020"))
   }
 )
+
+# Check XRN2 termination
+xrn2genes <- unlist(strsplit(rllstenr$`60-100%`$ChEA_2016$Genes[1], ";"))
+rllst$`60-100%` %>%
+  mutate(allGenes = strsplit(allGenes, ",")) %>%
+  unnest(cols = allGenes) %>%
+  filter(allGenes %in% xrn2genes) %>%
+  View()
+
 num_sel <- 5
 db <- "KEGG_2021_Human"
 # db <- "MSigDB_Hallmark_2020"
@@ -1111,4 +1228,155 @@ plt <- barplt %>%
   scale_color_viridis_c(direction = -1, option = "A", end = .9,
                         guide = guide_colorbar(title = "P adj (-log10)")) 
 ggsave(plt, filename = "results/Figure_6/path_enrich_tf.svg", height = 8, width = 6)
+
+## Housekeeping genes
+# msigdbr_df <- msigdbr::msigdbr(category = "C2", subcategory = "CGP")
+# msigdbr_t2g <- msigdbr_df %>% dplyr::distinct(gs_name, gene_symbol) %>% as.data.frame()
+hskg <- msigdbr::msigdbr(category = "C2", subcategory = "CGP") %>%
+  filter(gs_name == "HSIAO_HOUSEKEEPING_GENES") %>% pull(gene_symbol)
+allgen <- EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86 %>%
+  AnnotationDbi::select(
+    ., keys = AnnotationDbi::keys(.), columns = "SYMBOL"
+  ) %>% pull(SYMBOL)
+rllstgenes <-sapply(
+  rllst,
+  function(x) {
+    gen <- x %>%
+      # filter(rlregion %in% tssrls) %>%
+      pull(allGenes)
+    genlst <- unique(unlist(strsplit(gen, ",")))
+    print(calculate.overlap.and.pvalue(genlst, hskg, lower.tail = FALSE, total.size = length(allgen)))[3]
+  }
+)
+plt <- tibble(
+  "cons_pct" = names(rllstgenes),
+  "enrichment" = rllstgenes
+) %>%
+  mutate(enrichment = -log10(p.adjust(enrichment))) %>%
+  ggplot(aes(x = cons_pct, y  = enrichment)) +
+  geom_col(fill = "#57b580") +
+  coord_flip() + ylab("Enrichment [-log10(padj)]") + 
+  xlab("RL region conservation percentile") +
+  theme_bw(base_size = 14)
+ggsave(
+  plt,
+  filename = "results/Figure_6/housekeeping_genes.svg",
+  height = 5, width = 5
+)
+
+## Table S2 -- RL regions
+dir.create("results/Table_S2/", showWarnings = FALSE)
+locpat <- "(.+):(.+)-(.+):(.+)"
+rljoin %>%
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3")),
+    rlregion = gsub(rlregion, pattern = "All_", replacement = "")
+  ) %>%
+  select(
+    RLRegion = rlregion,
+    chrom, start, end, 
+    `Source (ip_type)` = source,
+    `Conservation (%)` = pct_cons,
+    `# Studies` = nStudies,
+    `Genes (overlapping)` = allGenes,
+    `In repeat region` = is_repeat,
+    `In RLFS` = is_rlfs
+  ) %>% 
+  write_csv("results/Table_S2/rlregions.csv")
+
+## Table S3 Differentially-abundant RL Regions
+dir.create("results/Table_S3/", showWarnings = FALSE)
+restbl %>%
+  mutate(rlregion = gsub(rlregion, pattern = "All_", replacement = "")) %>%
+  select(rlregion, baseMean, log2FoldChange, lfcSE, stat, pvalue, padj) %>%
+  write_csv("results/Table_S3/differentially_abundant_rlregions.csv")
+
+
+### Pausing index
+library(BRGenomics)
+library(rtracklayer)
+files <- tribble(
+  ~cell, ~strand, ~URL,
+  "A549", "+", "https://www.encodeproject.org/files/ENCFF979GYA/@@download/ENCFF979GYA.bigWig",
+  "A549", "-", "https://www.encodeproject.org/files/ENCFF275NOU/@@download/ENCFF275NOU.bigWig"
+) %>% mutate(destfile = gsub(URL, pattern = ".+download/(ENC.+)$", replacement = "tmp/\\1"))
+dir.create("tmp", showWarnings = FALSE)
+sapply(files$URL, function(x) {
+  destfile <- gsub(x, pattern = ".+download/(ENC.+)$", replacement = "tmp/\\1")  
+  download.file(x, destfile = destfile)
+})
+pos <- import.bw(files$destfile[1])
+strand(pos) <- "+"
+neg <- import.bw(files$destfile[2])
+neg$score <- -1 * neg$score
+strand(neg) <- "-"
+seqs <- c(pos, neg)
+txs <- GenomicFeatures::transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene)
+gb <- genebodies(txs, 300, -300, min.window = 400)
+txs <- subset(txs, tx_name %in% gb$tx_name)
+pr <- promoters(txs, 0, 100)
+pidx <- getPausingIndices(seqs, pr, gb)
+gts <- EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86 %>%
+  AnnotationDbi::select(
+    ., keys = AnnotationDbi::keys(.), columns = c("TXNAME", "SYMBOL")
+  )
+pidxtbl <- tibble(
+  "TXNAME" = gb$tx_name, 
+  "pauseIndex" = pidx
+) %>%
+  filter(! is.na(pauseIndex), is.finite(pauseIndex), pauseIndex > 0) %>%
+  mutate(TXNAME = gsub(TXNAME, pattern = "\\..+", replacement = "")) %>%
+  inner_join(gts, by = "TXNAME") 
+
+respid <- restbl %>%
+  mutate(cond = case_when(
+    log2FoldChange > 0 & padj < .05 ~ "S9.6-specific",
+    log2FoldChange < 0 & padj < .05 ~ "dRNH-specific",
+    TRUE ~ "None"
+  )) %>%
+  filter(cond != "None") %>%
+  dplyr::select(cond, SYMBOL=allGenes) %>%
+  mutate(SYMBOL = strsplit(SYMBOL, ",")) %>%
+  unnest(cols = "SYMBOL") %>%
+  inner_join(pidxtbl, by = "SYMBOL")
+
+library(magrittr)
+respid %T>%
+  {
+    group_by(., cond) %>% summarise(median(pauseIndex)) %>% print()
+  } %>%
+  ggplot(aes(x = cond, y = pauseIndex, fill = cond)) +
+  geom_violin(alpha = .5) +
+  geom_boxplot(width = .5) +
+  scale_y_log10() +
+  ylab("Pause index (log scale)") +
+  xlab(NULL) +
+  ggpubr::stat_compare_means(comparisons = list(c("dRNH-specific", "S9.6-specific")), 
+                             label = "p.signif", size = 6) +
+  scale_fill_manual(values = setNames(ip_cols, nm = paste0(names(ip_cols), "-specific"))) +
+  theme_bw(base_size = 14) +
+  ggpubr::rremove("legend") -> plt
+ggsave(plt, filename = "results/Figure_5/pause_index.svg", height = 6, width = 6)
+
+
+## Percent of genome
+locpat
+rlgr <- rlregions %>%
+  dplyr::select(location) %>%
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3"))
+  ) %>%
+  dplyr::select(-location) %>%
+  GenomicRanges::makeGRangesFromDataFrame() %>% reduce() 
+
+rs <- rlgr %>% 
+  width() %>%
+  sum()
+
+rs/3209286105  # From http://genomewiki.ucsc.edu/index.php/Hg38_7-way_Genome_size_statistics
+
 
