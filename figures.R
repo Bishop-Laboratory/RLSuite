@@ -1329,8 +1329,9 @@ pidxtbl <- tibble(
   filter(! is.na(pauseIndex), is.finite(pauseIndex), pauseIndex > 0) %>%
   mutate(TXNAME = gsub(TXNAME, pattern = "\\..+", replacement = "")) %>%
   inner_join(gts, by = "TXNAME") 
-
+tssrl <- unique(oltxsum$rlregion[oltxsum$type == "TSS"])
 respid <- restbl %>%
+  filter(rlregion %in% tssrl) %>%
   mutate(cond = case_when(
     log2FoldChange > 0 & padj < .05 ~ "S9.6-specific",
     log2FoldChange < 0 & padj < .05 ~ "dRNH-specific",
