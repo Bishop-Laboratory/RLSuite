@@ -49,14 +49,15 @@ futile.logger::flog.threshold(futile.logger::ERROR, name = "VennDiagramLogger")
 
 ### Figure 1/S1 ###
 
-## Table 1 -- univariate analysis ##
+## Table S1 -- univariate analysis ##
 rlsamples %>%
   tableone::CreateTableOne(
     data = .,
     test = FALSE, 
     vars = c("genome", "mode", "ip_type", "label")
   ) %>%
-  tableone::kableone() 
+  tableone::kableone() %>% 
+  kableExtra::kable_styling()  # Copy into Table S1
 
 ## Table S1 -- RLBase samples
 dir.create("results/Table_S1", showWarnings = FALSE)
@@ -176,7 +177,7 @@ pltLst <- lapply(names(datList), function(dat) {
 names(pltLst) <- names(datList)
 
 
-# Num peaks across conditions 
+# Num peaks across conditions -- pertains to Figure S1
 pltdat <- rlsamples %>%
   filter(label == "POS") %>%
   mutate(numPeaks = numPeaks / 1000) %>%
@@ -187,7 +188,7 @@ ord <- pltdat %>%
   group_by(mode) %>%
   summarise(npeak = mean(numPeaks))
 plt <- pltdat %>%
-  filter(! is.na(numPeaks)) %>%
+  filter(! is.na(numPeaks), numPeaks > 0) %>%
   arrange(numpeakmed) %>%
   mutate(mode = factor(mode, levels = unique(mode))) %>%
   ggplot(mapping = aes(x = mode, fill = mode,
@@ -243,6 +244,7 @@ toplt <- rlfsTbl %>%
   inner_join(rlsamples, by = "rlsample") 
 
 # With just selected samples
+# TODO: Need to pick different samples
 pos_pos <- c(
   "SRX3084731",
   "SRX4776642",
@@ -422,6 +424,8 @@ sizeFactTbl <- tibble(
   "sizeFactors.Reciprocal" = sizeFactors.Reciprocal
 ) %>% write_csv(file = "data/sizeFactors.csv")
 
+########## DOES NOT NEED TO BE RERUN WHEN NEW DATA ADDED ##############
+
 # Re-run deepTools with the scaling (done from the CLI)
 # 1. Predict fragment length
 # macs3 predictd -i "../RLBase-data/rlbase-data/rlpipes-out/bam/SRX2455193/SRX2455193_hg38.bam" -g hs
@@ -445,6 +449,9 @@ tribble(
 # bamCoverage -b "bam/SRX1025896/SRX1025896_hg38.bam" -o coverage_scaled/SRX1025896_hg38.scale.bw --scaleFactor 0.7183404 -p 44 -e 294 --ignoreDuplicates
 # bamCoverage -b "bam/SRX2683605/SRX2683605_hg38.bam" -o coverage_scaled/SRX2683605_hg38.scale.bw --scaleFactor 0.6507813 -p 44 -e 296 --ignoreDuplicates
 # bamCoverage -b "bam/SRX2675009/SRX2675009_hg38.bam" -o coverage_scaled/SRX2675009_hg38.scale.bw --scaleFactor 0.9435923 -p 44 -e 260 --ignoreDuplicates
+
+
+##########################################################
 
 
 # Gold standard heatmap
