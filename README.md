@@ -1,7 +1,7 @@
-# RLSuite Analysis
+# Analysis for Miller et al. 2022
 
 **Purpose**: The purpose of this repo is to enable replication of the 
-figures and analyses from the *RLSuite* manuscript. 
+figures and analyses from the *Miller et al., 2022* manuscript. The preprint of this manuscript is found [here](https://www.biorxiv.org/content/10.1101/2021.11.01.466823v2.full). 
 
 ## Quick-start
 
@@ -10,8 +10,8 @@ To re-create the figures from the manuscript, do the following:
 1. Clone the repo
 
 ```shell
-git clone https://github.com/Bishop-Laboratory/RLSuite.git
-cd RLSuite/
+git clone https://github.com/Bishop-Laboratory/RLoop-QC-Meta-Analysis-Miller-2022.git
+cd RLoop-QC-Meta-Analysis-Miller-2022/
 ```
 
 2. System dependencies
@@ -67,5 +67,5 @@ Rscript figures.R
 
 ## Troubleshooting
 
-If any issues arise or anything is unclear, please submit an [issue](https://github.com/Bishop-Laboratory/RLSuite/issues).
+If any issues arise or anything is unclear, please submit an [issue](https://github.com/Bishop-Laboratory/RLoop-QC-Meta-Analysis-Miller-2022/issues).
 
