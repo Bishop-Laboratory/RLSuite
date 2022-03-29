@@ -157,7 +157,7 @@ plot_feature <- function(feature, db, pltdat, lmts, yb, splitby) {
 }
 
 plot_multi_feature <- function(features, db, pltdat, lmts, yb, factororder, axislmts) {
-  
+  DODGE_POS <- .8
   data4plot <-  pltdat %>%
     as.list() %>%
     bind_rows() %>%
