@@ -384,9 +384,52 @@ plt <- barplt %>%
 plt
 
 
+### Chromatin States
+states <- annFull[sapply(names(annFull), grepl, pattern="Encode_CREs")] %>% 
+  bind_rows(.id = "group")
 
+state_pks <- valr::bed_intersect(
+  states, consInt3
+)
 
+statlst <- states %>% 
+  group_by(group) %>% 
+  {setNames(group_split(.), nm = group_keys(.)[[1]])}
 
+pltdat <- consInt3 %>% 
+  {setNames(group_split(.), nm = group_keys(.)[[1]])} %>% 
+  lapply(function(x) {
+    lapply(
+      statlst, function(y) {
+        valr::bed_fisher(x, y = y, genome = genome) %>% 
+          mutate(
+            state = y$group[1]
+          )
+      }
+    ) %>% 
+      bind_rows() %>% 
+      mutate(
+        group = x$group[1]
+      )
+  }) %>%
+  bind_rows() %>% 
+  mutate(
+    p.value = ifelse(p.value == 0, .Machine$double.xmin, p.value),
+    p.value = p.adjust(p.value)
+  ) %>% 
+  pivot_wider(id_cols = group, names_from = state, values_from = estimate) %>% 
+  column_to_rownames("group")
+
+pltdat %>%
+  # {log10(.) * -1} %>% 
+  log2() %>%
+  t() %>% 
+  pheatmap::pheatmap(
+    # scale = "row",
+    color = colorRampPalette(RColorBrewer::brewer.pal(9, "Blues"))(200)
+  )
+
+print(valr::bed_fisher(states, y = consInt3, genome = genome))
 
 
 
