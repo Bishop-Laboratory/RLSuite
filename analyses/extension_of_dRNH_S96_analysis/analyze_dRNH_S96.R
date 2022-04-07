@@ -267,36 +267,9 @@ tms <- lapply(
 plotAvgProf(tms, xlim=c(-5000, 5000), free_y = F, facet = "row", origin_label = "TTS")
 # tagHeatmap(tms, xlim=c(-5000, 5000), color=NULL)
 
-# ## Body
-# bms <- lapply(
-#   pks, 
-#   function(x) {
-#     getTagMatrix(
-#       peak = x, TxDb = txdb, 
-#       upstream = 5000, downstream = 5000, 
-#       type = "end_site", by = "intron", 
-#       weightCol = "pct_cons"
-#     )
-#   }
-# )
-# 
-# plotAvgProf(bms, xlim=c(-5000, 5000), free_y = F, facet = "row", origin_label = "Intron")
-# 
-
 ### Genomic coverage plot
 peakAnnoList <- lapply(pks, annotatePeak, TxDb=txdb,
                        tssRegion=c(-3000, 3000), verbose=T)
-plotAnnoBar(peakAnnoList)
-plotDistToTSS(peakAnnoList)
-
-
-### Coverage
-pks2 <- lapply(pks, GenomeInfoDb::keepStandardChromosomes, pruning.mode="coarse")
-# cplt <- covplot(pks2, weightCol="pct_cons")
-# cplt$layers[[1]]$aes_params = list(alpha=0)
-# cplt
-
-
 
 ### Top 1000 pathway enrichment
 geneLst <- consInt3 %>% 
@@ -336,7 +309,7 @@ num_sel <- 6
 db <- "KEGG_2021_Human"
 db <- "ChEA_2016"
 db <- "MSigDB_Hallmark_2020"
-db <- "GO_Biological_Process_2021"
+# db <- "GO_Biological_Process_2021"
 # db <- "GO_Biological_Process_2021"
 terms <- lapply(names(rllstenr), function(x) {
   rllstenr[[x]][[db]] %>%
@@ -553,13 +526,6 @@ write_csv(tibble(genesNow), file = "analyses/extension_of_dRNH_S96_analysis/dEnh
 
 #### Step #3: Tissue-specific enhancer analysis ####
 
-# These are the available tissue types
-dat %>%
-  filter(ip_type == "dRNH", genome == "hg38") %>% 
-  pull(tissue) %>% 
-  table()
-
-
 ### CUTLL1
 
 ct <- "CUTLL1"
@@ -730,3 +696,515 @@ plt <- plttbl %>%
   xlab(NULL) +
   ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
+
+
+
+#### Step #4: Chromatin State Analysis (poised vs active enhancers) ####
+
+fls <- list(
+  "HEK293" = "https://www.encodeproject.org/files/ENCFF476TTU/@@download/ENCFF476TTU.bed.gz",
+  "HCT116" = "https://www.encodeproject.org/files/ENCFF513PJK/@@download/ENCFF513PJK.bed.gz",
+  "iPSCs" = "https://www.encodeproject.org/files/ENCFF115RIR/@@download/ENCFF115RIR.bed.gz",
+  "iPSCs2" = "https://www.encodeproject.org/files/ENCFF519CTX/@@download/ENCFF519CTX.bed.gz",
+  "iPSCs3" = "https://www.encodeproject.org/files/ENCFF676VUR/@@download/ENCFF676VUR.bed.gz"
+)
+
+pks <- lapply(
+  fls, read_tsv, 
+  col_names = c(
+    "chrom", "start", "end", "name", 
+    "score", "strand", "start2", "end2", "color"
+  )
+)
+pks <- lapply(
+  pks, function(x) {
+    filter(x, str_detect(name, "Enh")) %>% 
+      GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+  }
+)
+
+# Look at overlap between dENH and predicted enhancers
+dd <- reduce(do.call("c", unlist(pks, use.names = FALSE)))
+ol1 <- ChIPpeakAnno::findOverlapsOfPeaks(dd, dEnh)
+ChIPpeakAnno::makeVennDiagram(ol1)
+
+
+### iPSCs
+
+ct <- "iPSCs"
+
+## Load in the data
+dat <-  RLHub::rlbase_samples() 
+ctl <- dat %>%
+  filter(
+    ip_type == "dRNH",
+    genome == "hg38",
+    tissue == ct,
+    label == "POS",
+    prediction == "POS",
+    numPeaks > 5000
+  ) 
+grs <- lapply(ctl$rlsample, function(x) {
+  gr <- GenomicRanges::GRanges(RLSeq::RLRangesFromRLBase(x))
+  # gr <- gr[gr$qval > 3,]
+  gr
+})
+names(grs) <- ctl$rlsample
+
+## Analyze feature distribution
+pal <- lapply(
+  grs, annotatePeak, TxDb=txdb,
+  tssRegion=c(-3000, 3000), verbose=T
+)
+
+## Find overlaps with enhancers
+
+# Get intergenic ranges
+gris <- lapply(seq(pal), function(i) {
+  grs[[i]][pal[[i]]@detailGenomicAnnotation$Intergenic, ]
+})
+names(gris) <- names(pal)
+gri <- GenomicRanges::reduce(do.call("c", unlist(gris, use.names = F)), with.revmap=T)
+gri <- gri[which(sapply(gri$revmap, length) > 1),]
+
+## Find the specific Enh
+# Get the intergenic peaks from both iPSC samples & find overlap
+pki <- pks$iPSCs %>% 
+  annotatePeak(TxDb = txdb, tssRegion = c(-3000, 3000), verbose = TRUE)
+pki <- pks$iPSCs[pki@detailGenomicAnnotation$Intergenic,]
+pki <- pki[! pki$name %in% c("EnhG1", "EnhG2"), ]
+
+# Transfer labels to the dEnh from GH
+olpe <- ChIPpeakAnno::findOverlapsOfPeaks(
+  pki, dEnh[dEnh$score > .5,]
+)
+ChIPpeakAnno::makeVennDiagram(olpe)
+colnames(olpe$overlappingPeaks$`pki///dEnh`)[7] <- "pName"
+dEnh2 <- olpe$overlappingPeaks$`pki///dEnh` %>% 
+  select(name, pName) %>% 
+  as_tibble() %>% 
+  group_by(name) %>% 
+  mutate(n=n()) %>% 
+  filter(n==1) %>% 
+  select(-n) %>% 
+  inner_join(as.data.frame(dEnh)) %>% 
+  as.data.frame() %>% 
+  ChIPpeakAnno::toGRanges()
+
+
+# Analyze dEnh and Peaks
+olde3 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh2, gri)
+ChIPpeakAnno::makeVennDiagram(olde3)
+d1 <- olde3$overlappingPeaks$`dEnh2///gri`$pName %>% 
+  tibble() %>% 
+  dplyr::rename(enh=1) %>% 
+  group_by(enh) %>% 
+  tally() %>% 
+  mutate(`dRNH-accessible` = n / sum(n)) %>% 
+  select(-n)
+
+olde3$all.peaks$dEnh2$pName %>%
+  tibble() %>% 
+  dplyr::rename(enh=1) %>% 
+  group_by(enh) %>% 
+  tally() %>% 
+  mutate(`Total dEnh` = n / sum(n)) %>% 
+  select(-n) %>% 
+  inner_join(d1) %>% 
+  pivot_longer(cols = ! matches("^enh")) %>% 
+  ggplot(aes(fill = enh, y = value, x = name)) +
+  geom_col() +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Proportion of distal enhancers") +
+  ggtitle(
+    paste0(ct, " distal enhancer profile"),
+    subtitle = "dRNH-accessible vs total enhancer population"
+  ) +
+  theme_gray(base_size = 14)
+
+
+# For these overlapping peaks, what are they?
+dENH_gri <- olde3$overlappingPeaks$`dEnh2///gri`
+ghfull %>% 
+  filter(
+    name %in% dENH_gri$peaks1[dENH_gri$pName %in% c("EnhBiv")],
+    gene_scores > 10
+  ) -> dd
+unique(dd$genes) -> genesNow
+genesNow
+groupNow <- paste0(ct, " - Enh analysis")
+response <- httr::POST(  # Post request to enrichr based on https://maayanlab.cloud/Enrichr/help#api&q=1
+  url = 'https://maayanlab.cloud/Enrichr/addList', 
+  body = list(
+    'list' = paste0(genesNow, collapse = "\n"),
+    'description' = groupNow
+  )
+)
+response <- jsonlite::fromJSON(httr::content(response, as = "text"))  # Collect response
+permalink <- paste0("https://maayanlab.cloud/Enrichr/enrich?dataset=",  # Create permalink
+                    response$shortId[1])
+permalink
+
+
+eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
+num_sel <- 8
+eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel)
+terms <- eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel) %>% 
+  filter(row_number() <= num_sel) %>% pull(Term)
+terms <- unique(unlist(terms))
+terms
+plttbl <- eres[[1]] %>%
+  as_tibble() %>%
+  filter(Term %in% terms) %>%
+  select(Term, combined_score=Combined.Score, padj=Adjusted.P.value)
+plt <- plttbl %>%
+  arrange(combined_score) %>% 
+  mutate(
+    Term = factor(Term,
+                  levels = unique(Term))
+  ) %>%
+  filter(! is.na(Term)) %>%
+  ggplot(aes(x = Term, y = combined_score)) +
+  geom_col() +
+  coord_flip() +
+  theme_bw(base_size = 14) +
+  ylab(NULL) +
+  xlab(NULL) +
+  ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
+plt
+
+eres <- enrichr(genesNow, databases = "ChEA_2016")
+num_sel <- 8
+eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel)
+terms <- eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel) %>% 
+  filter(row_number() <= num_sel) %>% pull(Term)
+terms <- unique(unlist(terms))
+terms
+plttbl <- eres[[1]] %>%
+  as_tibble() %>%
+  filter(Term %in% terms) %>%
+  select(Term, combined_score=Combined.Score, padj=Adjusted.P.value)
+plt <- plttbl %>%
+  arrange(combined_score) %>% 
+  mutate(
+    Term = factor(Term,
+                  levels = unique(Term))
+  ) %>%
+  filter(! is.na(Term)) %>%
+  ggplot(aes(x = Term, y = combined_score)) +
+  geom_col() +
+  coord_flip() +
+  theme_bw(base_size = 14) +
+  ylab(NULL) +
+  xlab(NULL) +
+  ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in ChEA Database")
+plt
+
+
+eres <- enrichr(genesNow, databases = "ARCHS4_TFs_Coexp")
+num_sel <- 8
+eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel)
+terms <- eres[[1]] %>%
+  as_tibble() %>%
+  slice_min(P.value, n = num_sel) %>% 
+  filter(row_number() <= num_sel) %>% pull(Term)
+terms <- unique(unlist(terms))
+terms
+plttbl <- eres[[1]] %>%
+  as_tibble() %>%
+  filter(Term %in% terms, P.value < 0.01) %>%
+  select(Term, combined_score=Combined.Score, padj=Adjusted.P.value)
+plt <- plttbl %>%
+  arrange(combined_score) %>% 
+  mutate(
+    Term = factor(Term,
+                  levels = unique(Term))
+  ) %>%
+  filter(! is.na(Term)) %>%
+  ggplot(aes(x = Term, y = combined_score)) +
+  geom_col() +
+  coord_flip() +
+  theme_bw(base_size = 14) +
+  ylab(NULL) +
+  xlab(NULL) +
+  ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in ARCHS4 TF Database")
+plt
+
+#### Step #5: Analyze relationship with eRNA 
+
+
+if (! file.exists(gsub(chain, pattern="\\.gz", replacement=""))) {
+  chain <-  'data/hg38_to_hg19.chain.gz'
+  download.file("http://hgdownload.cse.ucsc.edu/goldenpath/hg38/liftOver/hg38ToHg19.over.chain.gz", destfile = chain)
+  R.utils::gunzip(chain)
+}
+
+### iPSCs
+
+gro1 <- read_tsv(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3271nnn/GSM3271001/suppl/GSM3271001_iPSC_11104_A.bedGraph.gz",
+  col_names = c("chrom", "start", "end", "score")
+)
+gro2 <- read_tsv(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3271nnn/GSM3271002/suppl/GSM3271002_iPSC_11104_B.bedGraph.gz",
+  col_names = c("chrom", "start", "end", "score")
+)
+
+
+int <- valr::bed_intersect(gro1, gro2)
+gro <- int %>% 
+  mutate(score = score.x + score.y) %>% 
+  select(chrom, start=start.x, end=end.y, score)
+
+
+chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
+dEnh2hg19 <- rtracklayer::liftOver(dEnh2, chain = chn) %>% unlist()
+
+dEnh2_min <- as.data.frame(dEnh2hg19) %>% 
+  as_tibble() %>% 
+  mutate(name = names(dEnh2hg19)) %>% 
+  select(chrom=seqnames, start, end, name)
+int <- valr::bed_intersect(gro, dEnh2_min)
+intGRO <- int %>%
+  group_by(name.y) %>% 
+  summarise(GRO = sum(score.x)) %>% 
+  dplyr::rename(name=name.y)
+# Get RPKM
+intGRO
+dEnh_min2 <- dEnh2_min %>% mutate(width = end - start)
+intGRO <- inner_join(intGRO, select(dEnh_min2, name, width)) %>% 
+  mutate(
+    RPKM = GRO /
+      (
+        (width/1000) *
+          (sum(GRO)/1000000)
+      ),
+    RPKM = log2(RPKM + 1)
+ ) %>% select(-width)
+dEnh3 <- as.data.frame(dEnh2hg19) %>% 
+  as_tibble() %>% 
+  mutate(name = names(dEnh2hg19),
+         name2=name) %>% 
+  inner_join(intGRO) %>% 
+  as.data.frame() %>% 
+  ChIPpeakAnno::toGRanges() %>% 
+  unique()
+
+# hg19 the GRI
+grihg19 <- rtracklayer::liftOver(gri, chain = chn) %>% unlist()
+
+# Overlap with iPSC peaks
+olde4 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh3, grihg19)
+ChIPpeakAnno::makeVennDiagram(olde4)
+d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM %>% #[olde4$overlappingPeaks$`dEnh3///gri`$pName == "EnhBiv"] %>% 
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "dRNH-accessible"
+  )
+
+d2 <- olde4$all.peaks$dEnh3$RPKM %>% #[ olde4$all.peaks$dEnh3$pName == "EnhBiv"] %>%
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "Total dEnh"
+  )
+
+
+bind_rows(d1, d2) %>% 
+  filter(value > 0) %>%
+  ggplot(aes(y = value, x = cond)) +
+  geom_boxplot() +
+  ggpubr::stat_compare_means(
+    method.args = list(alternative="greater"),
+    comparisons = list(c("dRNH-accessible", "Total dEnh")),
+    label = "p.format"
+  ) +
+  xlab(NULL) +
+  ylab("eRNA RPKM (log2 + 1)") +
+  ggtitle(
+    paste0(ct, " distal enhancer RNA profile"),
+    subtitle = "dRNH-accessible vs total enhancer population"
+  ) +
+  theme_gray(base_size = 14)
+
+
+
+d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM[olde4$overlappingPeaks$`dEnh3///grihg19`$pName == "EnhBiv"] %>% 
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "dRNH-accessible"
+  )
+
+d2 <- olde4$all.peaks$dEnh3$RPKM[ olde4$all.peaks$dEnh3$pName == "EnhBiv"] %>%
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "Total dEnh"
+  )
+
+
+bind_rows(d1, d2) %>% 
+  filter(value > 0) %>%
+  ggplot(aes(y = value, x = cond)) +
+  geom_boxplot() +
+  ggpubr::stat_compare_means(
+    method.args = list(alternative="greater"),
+    comparisons = list(c("dRNH-accessible", "Total dEnh"))
+  ) +
+  xlab(NULL) +
+  ylab("eRNA RPKM (log2 + 1)") +
+  ggtitle(
+    paste0(ct, " distal enhancer RNA profile (Bivalent)"),
+    subtitle = "dRNH-accessible vs total bivalent enhancer population"
+  ) +
+  theme_gray(base_size = 14)
+
+
+### CUTLL1
+
+gro1 <- valr::read_bigwig(
+  "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_forward.bw",
+  set_strand = "*"
+)
+# gro2 <- valr::read_bigwig(
+#   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_reverse.bw",
+#   set_strand = "*"
+# ) %>% mutate(score=-1*score)
+gro3 <- valr::read_bigwig(
+  "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_00h_forward.bw",
+  set_strand = "*"
+)
+# gro4 <- valr::read_bigwig(
+#   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_00h_reverse.bw",
+#   set_strand = "*"
+# ) %>% mutate(score=-1*score)
+
+gro <- valr::bed_merge(bind_rows(list(
+  gro1, 
+  gro2, 
+  gro3, 
+  gro4
+)), score = sum(score))
+
+chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
+dEnh2hg19 <- rtracklayer::liftOver(dEnh2, chain = chn) %>% unlist()
+
+dEnh2_min <- as.data.frame(dEnh2hg19) %>% 
+  as_tibble() %>% 
+  mutate(name = names(dEnh2hg19)) %>% 
+  select(chrom=seqnames, start, end, name)
+int <- valr::bed_intersect(gro, dEnh2_min)
+intGRO <- int %>%
+  group_by(name.y) %>% 
+  summarise(GRO = sum(score.x)) %>% 
+  dplyr::rename(name=name.y)
+# Get RPKM
+intGRO
+dEnh_min2 <- dEnh2_min %>% mutate(width = end - start)
+intGRO <- inner_join(intGRO, select(dEnh_min2, name, width)) %>% 
+  mutate(
+    RPKM = GRO /
+      (
+        (width/1000) *
+          (sum(GRO)/1000000)
+      ),
+    RPKM = log2(RPKM + 1)
+  ) %>% select(-width)
+dEnh3 <- as.data.frame(dEnh2hg19) %>% 
+  as_tibble() %>% 
+  mutate(name = names(dEnh2hg19),
+         name2=name) %>% 
+  inner_join(intGRO) %>% 
+  as.data.frame() %>% 
+  ChIPpeakAnno::toGRanges() %>% 
+  unique()
+
+# hg19 the GRI
+grihg19 <- rtracklayer::liftOver(gri, chain = chn) %>% unlist()
+
+# Overlap with iPSC peaks
+olde4 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh3, grihg19)
+ChIPpeakAnno::makeVennDiagram(olde4)
+d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM %>% #[olde4$overlappingPeaks$`dEnh3///gri`$pName == "EnhBiv"] %>% 
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "dRNH-accessible"
+  )
+
+d2 <- olde4$all.peaks$dEnh3$RPKM %>% #[ olde4$all.peaks$dEnh3$pName == "EnhBiv"] %>%
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "Total dEnh"
+  )
+
+
+bind_rows(d1, d2) %>%
+  ggplot(aes(y = value, x = cond)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  ggpubr::stat_compare_means(
+    method.args = list(alternative="greater"),
+    comparisons = list(c("dRNH-accessible", "Total dEnh")),
+    label = "p.format"
+  ) +
+  xlab(NULL) +
+  ylab("eRNA RPKM (log2 + 1)") +
+  ggtitle(
+    paste0(ct, " distal enhancer RNA profile"),
+    subtitle = "dRNH-accessible vs total enhancer population"
+  ) +
+  theme_gray(base_size = 14)
+
+
+
+d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM[olde4$overlappingPeaks$`dEnh3///grihg19`$pName == "EnhBiv"] %>% 
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "dRNH-accessible"
+  )
+
+d2 <- olde4$all.peaks$dEnh3$RPKM[ olde4$all.peaks$dEnh3$pName == "EnhBiv"] %>%
+  tibble() %>% 
+  dplyr::rename(value=1) %>% 
+  mutate(
+    cond = "Total dEnh"
+  )
+
+
+bind_rows(d1, d2) %>% 
+  filter(value > 0) %>%
+  ggplot(aes(y = value, x = cond)) +
+  geom_boxplot() +
+  ggpubr::stat_compare_means(
+    method.args = list(alternative="greater"),
+    comparisons = list(c("dRNH-accessible", "Total dEnh"))
+  ) +
+  xlab(NULL) +
+  ylab("eRNA RPKM (log2 + 1)") +
+  ggtitle(
+    paste0(ct, " distal enhancer RNA profile (Bivalent)"),
+    subtitle = "dRNH-accessible vs total bivalent enhancer population"
+  ) +
+  theme_gray(base_size = 14)
+
+
+
+
+
+
