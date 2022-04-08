@@ -13,7 +13,7 @@ annFull <- RLHub::annots_full_hg38()
 
 ##### Analysis of peak sizes and locations dRNH vs S9.6 #####
 
-### Step #1: Find the difference in sizes between shared/non-shared consensus peaks
+#### Step #1: Find the difference in sizes between shared/non-shared consensus peaks
 
 ## Read in peaks
 drnh_cons <- read_tsv(
@@ -47,21 +47,17 @@ genes <- AnnotationDbi::select(
   distinct(SYMBOL, .keep_all = TRUE)
 
 ## Get the dRNH-only and S96-only along with shared
-int <- valr::bed_intersect(s96_cons, drnh_cons)
+# TODO: Re-check this using ChIP peak anno
+# int <- valr::bed_intersect(s96_cons, drnh_cons)
+# olol <- ChIPpeakAnno::findOverlapsOfPeaks(GenomicRanges::makeGRangesFromDataFrame(s96_cons), GenomicRanges::makeGRangesFromDataFrame(drnh_cons))
+# ChIPpeakAnno::makeVennDiagram(olol)
+
 cons2 <- list(
   "dRNH-only" = drnh_cons[! drnh_cons$name %in% int$name.y,],
   "S9.6-only" = s96_cons[! s96_cons$name %in% int$name.x,],
   "dRNH-shared" = drnh_cons[drnh_cons$name %in% int$name.y,],
   "S9.6-shared" = s96_cons[s96_cons$name %in% int$name.x,],
-  "Shared" = int %>%
-    mutate(start = ifelse(start.x < start.y, start.x, start.y),
-           end = ifelse(end.x > end.y, end.x, end.y),
-           plx = start.x + peak.x,
-           ply = start.y + peak.y,
-           pl = (plx + ply) / 2,
-           peak = round(pl - start),
-           name = paste0("Shared__", row_number())) %>%
-    select(chrom, start, end, peak, name)
+  "S9.6" = s96_cons
 )
 
 
@@ -71,7 +67,6 @@ pltdat <- bind_rows(cons2, .id = "group") %>%
   mutate(
     width = end - start
   ) %>% 
-  filter(group != "Shared") %>% 
   mutate(
     pct_cons = case_when(
       grepl(group, pattern = "dRNH") ~ 100 * ((score / 10) / ndrnh),
@@ -82,7 +77,7 @@ pltdat <- bind_rows(cons2, .id = "group") %>%
   )
 mu <- pltdat %>% group_by(group2) %>% summarise(mu=mean(width))
 mu
-plt <- ggplot(pltdat, aes(y = width, x=group2, color = group2)) +
+plt <- ggplot(pltdat, aes(y = width, x=group2, fill = group2)) +
   geom_violin(width = .6) +
   geom_boxplot(width = .2) +
   # ggridges::geom_density_ridges(alpha=.3) +
@@ -92,10 +87,12 @@ plt <- ggplot(pltdat, aes(y = width, x=group2, color = group2)) +
   xlab(NULL) +
   ggtitle("Peak width across groups", subtitle = "Consensus peaksets") +
   guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
+  scale_fill_manual(values = c("dRNH-only" = "#e2a3e3", "dRNH-shared" = "#ccb6cc", "S9.6" = "#82d0e8")) +
   ggpubr::stat_compare_means(
     comparisons = list(c("dRNH-only", "dRNH-shared")),
     method.args = list(alternative="less")
-  )
+  ) +
+  ggpubr::rremove("legend")
 plt
 
 ## Density plot of peak strengths
@@ -118,108 +115,12 @@ plt <- ggplot(pltdat, aes(y = pct_cons, x=group2, color = group2)) +
 plt
 
 
-
-# TODO: If the R-loop is stronger and more conserved, easier for S9.6 to see it (look at expression / RNAPII)
-
-
-
-### Step #2: Repeat the size/strength analysis using the underlying peaks
-
-rlrm <- RLHub::rlregions_meta()
-
-## Find the peaks that go into each group
-locpat <- "(.+):(.+)\\-(.+):(.+)"
-rlr <- rlrm %>% 
-  select(
-    location, samples
-  ) %>% 
-  mutate(
-    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
-    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
-    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3"))
-  ) %>% 
-  select(-location)
-pltdat2 <- select(pltdat, group, group2, chrom, start, end, peak, width, pct_cons, name)
-pltint <- valr::bed_intersect(pltdat2, rlr)
-
-### Substep: Get the peak sizes overlapping each
-
-rlsamps <- RLHub::rlbase_samples()
-rlgood <- rlsamps %>%
-  filter(
-    ip_type %in% c("dRNH", "S9.6"),
-    genome == "hg38",
-    label == "POS",
-    prediction == "POS",
-    numPeaks > 5000
-  )
-
-i <- 62
-
-reslst <- pbapply::pblapply(
-  seq(nrow(rlgood)), function(i) {
-    message(i)
-    samp <- rlgood$rlsample[i]
-    ip_type <- rlgood$ip_type[i]
-    mode <- rlgood$mode[i]
-    peak <- paste0("../RLBase-data/rlbase-data/rlpipes-out/peaks/", samp, "_hg38.broadPeak")
-    pk <- valr::read_broadpeak(peak) %>% 
-      mutate(width = end - start) %>% 
-      slice_sample(n = 5000)
-    pkint <- valr::bed_intersect(pltdat, pk) %>% 
-      select(
-        group = group.x, group2=group2.x, rlr_name=name.x, pk_name=name.y, 
-        pk_width=width.y, pk_signal=signal.y, pk_pval=pvalue.y, pk_qval=qvalue.y
-      ) %>% 
-      filter(if ({{ ip_type }} == "S9.6") grepl(group, pattern = "S9.6") else grepl(group, pattern = "dRNH"))
-    pkint
-  }
-)
-
-restbl <- reslst %>% 
-  bind_rows()
-
-restbl2 <- restbl %>% 
-  filter(pk_width > 0)
-
-mu <- restbl2 %>% group_by(group2) %>% summarise(mu=mean(pk_width))
-mu
-plt <- ggplot(restbl2, aes(y = pk_width, x=group2, color = group2)) +
-  geom_violin(width =.6) +
-  geom_boxplot(width=.2) +
-  scale_y_log10() +
-  theme_classic(base_size = 18) +
-  ylab("Peak width (log10 bp)") + xlab("Group") +
-  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
-  ggtitle("Peak width across groups", subtitle = "Individual peaksets (underlying peak data)") +
-  ggpubr::stat_compare_means(
-    comparisons = list(c("dRNH-only", "dRNH-shared")),
-    method.args = list(alternative="less")
-  )
-plt
-
-mu <- restbl2 %>% group_by(group2) %>% summarise(mu=mean(pk_qval))
-mu
-plt <- ggplot(restbl2, aes(y = pk_qval, x=group2, color = group2)) +
-  geom_violin(width =.6) +
-  geom_boxplot(width=.2) +
-  theme_classic(base_size = 18) +
-  scale_y_log10() +
-  ylab("Peak strength (log10 p.adj val)") + xlab("Group") +
-  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
-  ggtitle("Peak stength across groups", subtitle = "Individual peaksets (underlying peak data)") +
-  ggpubr::stat_compare_means(
-    comparisons = list(c("dRNH-only", "dRNH-shared")),
-    method.args = list(alternative="less")
-  )
-plt
-
-
-#### Proportion test
-### What prop of dRNH-detected R-loops are also detected by S9.6?
-### What prop of S9.6-detected R-loops are also detected by dRNH?
-### Check with pie charts or Bar charts
+#### Step #2: Proportion test
+## What prop of dRNH-detected R-loops are also detected by S9.6?
+## What prop of S9.6-detected R-loops are also detected by dRNH?
+## Check with pie charts or Bar charts
 pltdat %>% 
+  filter(group != "S9.6") %>% 
   group_by(group) %>% 
   tally() %>% 
   mutate(group2 = gsub(group, pattern = "\\-.+", replacement = ""),
@@ -229,17 +130,22 @@ pltdat %>%
   ggplot(aes(x = group2, y = prop, fill=group3)) +
   geom_col() +
   coord_flip() +
-  theme_gray(base_size = 13) +
+  theme_gray(base_size = 14) +
+  theme(legend.title = element_blank()) +
   ylab("Proportion of consensus peaks") +
-  xlab(NULL)
+  xlab(NULL) +
+  ggtitle("Proportion of S9.6 and dRNH peaks found by both IPs vs not")
 
 
-#### Analysis of Tx Features
+
+#### Step #3: Analysis of Tx Features
 ### What are the features overlapping consensus peaks in each group?
 ### How does this relate to peak size/strength?
 
+cons3 <- cons2[! names(cons2) %in% c("S9.6-only", "S9.6-shared")]
+
 ## Compare samples around genomic features
-consInt2 <- lapply(cons2, function(x) {
+consInt2 <- lapply(cons3, function(x) {
   # Call summits
   x <- x %>%
     dplyr::rename(so = start, 
@@ -319,6 +225,7 @@ plt <- oltxres2 %>%
     )))
   )  %>%
   filter(source != "Shared") %>% 
+  mutate(source = factor(source, levels = rev(unique(.$source)))) %>% 
   ggplot(aes(x = source, y = n, fill = type)) +
   geom_bar(stat = "identity", position = "stack") +
   theme_bw(base_size = 14) +
@@ -328,7 +235,8 @@ plt <- oltxres2 %>%
   scale_fill_manual(
     values = txfeat_cols,
     guide = guide_legend(title = "Feature", reverse = TRUE)
-  )
+  ) +
+  ggtitle("Overlap of consensus R-loops with tx features")
 plt
 
 
@@ -354,76 +262,54 @@ plt <- ggplot(pltdat, aes(x = pct_cons, color = group, fill = group)) +
 plt
 
 
-## Hockey plot of conservation across peaks
-plt <- pltdat %>% 
-  mutate(
-    source2 = gsub(name, pattern = "__.+", replacement = "")
-  ) %>% 
-  ggplot(
-    aes(
-      x = pct_rank, y = pct_cons, color = group
-    )
-  ) +
-  geom_line() +
-  ggtitle("Conservation level of consensus peaks", 
-          subtitle = "Grouped by source and overlap") +
-  xlab("Proportion of total consensus peaks") +
-  ylab("Percent conservation across samples") +
-  theme_gray(
-    base_size = 13
-  ) +
-  facet_wrap(~source2) +
-  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL))
-plt
-
-
 ## TSS / TES enrichment metaplot
 
-library(ChIPseeker)
-pks <- pltdat %>% 
-  group_by(group) %>% 
-  {
-    setNames(
-      group_split(.),
-      nm = group_keys(.)[[1]]
-    )
-  } %>% 
-  as.list() %>% 
-  lapply(GenomicRanges::makeGRangesFromDataFrame, keep.extra.columns = TRUE)
-
-## TSS
-txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene
-pms <- lapply(
-  pks, 
-  function(x) {
-    getTagMatrix(
-      peak = x, TxDb = txdb, 
-      upstream = 5000, downstream = 5000, 
-      type = "start_site", by = "gene", 
-      weightCol = "pct_cons",
-    )
-  }
-)
-
-plotAvgProf(pms, xlim=c(-5000, 5000), free_y = F,  facet = "row", origin_label = "TSS")
-# tagHeatmap(pms, xlim=c(-5000, 5000), color=NULL)
-
-## TTS
-tms <- lapply(
-  pks, 
-  function(x) {
-    getTagMatrix(
-      peak = x, TxDb = txdb, 
-      upstream = 5000, downstream = 5000, 
-      type = "end_site", by = "gene", 
-      weightCol = "pct_cons",
-    )
-  }
-)
-
-plotAvgProf(tms, xlim=c(-5000, 5000), free_y = F, facet = "row", origin_label = "TTS")
-# tagHeatmap(tms, xlim=c(-5000, 5000), color=NULL)
-
+# library(ChIPseeker)
+# pks <- pltdat %>% 
+#   filter(! group %in% c("S9.6-only", "S9.6-shared")) %>% 
+#   group_by(group) %>% 
+#   {
+#     setNames(
+#       group_split(.),
+#       nm = group_keys(.)[[1]]
+#     )
+#   } %>% 
+#   as.list() %>% 
+#   lapply(GenomicRanges::makeGRangesFromDataFrame, keep.extra.columns = TRUE)
+# 
+# ## TSS
+# txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene
+# pms <- lapply(
+#   pks, 
+#   function(x) {
+#     getTagMatrix(
+#       peak = x, TxDb = txdb, 
+#       upstream = 5000, downstream = 5000, 
+#       type = "start_site", by = "gene", 
+#       weightCol = "pct_cons",
+#     )
+#   }
+# )
+# 
+# plotAvgProf(pms, xlim=c(-5000, 5000), free_y = F,  facet = "row", origin_label = "TSS")
+# # tagHeatmap(pms, xlim=c(-5000, 5000), color=NULL)
+# 
+# ## TTS
+# tms <- lapply(
+#   pks, 
+#   function(x) {
+#     getTagMatrix(
+#       peak = x, TxDb = txdb, 
+#       upstream = 5000, downstream = 5000, 
+#       type = "end_site", by = "gene", 
+#       weightCol = "pct_cons",
+#     )
+#   }
+# )
+# 
+# plotAvgProf(tms, xlim=c(-5000, 5000), free_y = F, facet = "row", origin_label = "TTS")
+# # tagHeatmap(tms, xlim=c(-5000, 5000), color=NULL)
+# 
 ### Genomic coverage plot
 peakAnnoList <- lapply(pks, annotatePeak, TxDb=txdb,
                        tssRegion=c(-3000, 3000), verbose=T)
@@ -488,7 +374,7 @@ barplt <- plttbl %>%
   mutate(
     combined_score = case_when(
       is.na(combined_score) | combined_score < 1 ~ 0,
-      combined_score > 300 ~ 300,
+      combined_score > 100 ~ 100,
       TRUE ~ combined_score
     )
   ) %>%
@@ -504,6 +390,7 @@ plt <- barplt %>%
     Term = factor(Term,
                   levels = unique(barplt$Term[barplt$combined_score != 0]))
   ) %>%
+  filter(! quant %in% c("S9.6-only", "S9.6-shared")) %>% 
   filter(! is.na(Term)) %>%
   ggplot(aes(x = Term, color = -log10(padj), size=combined_score, y = quant)) +
   geom_point() +
@@ -513,7 +400,8 @@ plt <- barplt %>%
   ylab(NULL) +
   xlab(NULL) +
   scale_color_viridis_c(direction = -1, option = "A", end = .9,
-                        guide = guide_colorbar(title = "P adj (-log10)")) 
+                        guide = guide_colorbar(title = "P adj (-log10)")) +
+  ggtitle("TF target enrichment in consensus R-loop regions")
 plt
 
 
@@ -548,7 +436,15 @@ pltdat <- consInt3 %>%
   bind_rows() %>% 
   mutate(
     p.value = ifelse(p.value == 0, .Machine$double.xmin, p.value),
-    p.value = p.adjust(p.value)
+    p.value = p.adjust(p.value),
+    state = gsub(state, pattern = ".+__(.+)", replacement = "\\1"),
+    state = case_when(
+      state == "CTCF" ~ "CTCF-only",
+      state == "enhD" ~ "Distal Enhancer",
+      state == "enhP" ~ "Enhancer-Promoter",
+      state == "prom" ~ "Promoter",
+      state == "K4m3" ~ "H3K4me3"
+    )
   ) %>% 
   pivot_wider(id_cols = group, names_from = state, values_from = estimate) %>% 
   column_to_rownames("group")
@@ -557,7 +453,10 @@ pltdat %>%
   log2() %>%
   t() %>% 
   pheatmap::pheatmap(
-    color = colorRampPalette(RColorBrewer::brewer.pal(9, "Blues"))(200)
+    color = colorRampPalette(RColorBrewer::brewer.pal(9, "Blues"))(200),
+    angle_col = 45,
+    main = "Enrichment of peaks within CREs",
+    cluster_cols = F
   )
 
 print(valr::bed_fisher(states, y = consInt3, genome = genome))
@@ -610,49 +509,143 @@ dEnh <- ghgr[which(ghanno@detailGenomicAnnotation$Intergenic),]
 pks3 <- pks %>% lapply(function(x) {x$score <- x$pct_cons; x})
 
 ## Overlap of dRNH-only & S9.6-only & all ENH
-ole <- ChIPpeakAnno::findOverlapsOfPeaks(ghgr, pks$`dRNH-only`, pks$`S9.6-only`)
-ChIPpeakAnno::makeVennDiagram(ole, NameOfPeaks = c("Enh", "dRNH-only", "S9.6-only"))
-ChIPpeakAnno::binOverFeature(
-  pks3$`dRNH-shared`, pks3$`dRNH-only`, pks3$`S9.6-shared`, pks3$`S9.6-only`,
+olrm <- ChIPpeakAnno::findOverlapsOfPeaks(pks$`dRNH-only`, pks$`dRNH-shared`)
+ole <- ChIPpeakAnno::findOverlapsOfPeaks(ghgr, pks$`dRNH-only`, pks$`dRNH-shared`, pks$S9.6)
+ChIPpeakAnno::makeVennDiagram(ole, NameOfPeaks = c("Enh", "dRNH-only", "dRNH-shared", "S9.6"))
+
+gr2bed2 <- function(x) {
+  as.data.frame(x) %>% 
+    as_tibble() %>% 
+    dplyr::rename(chrom=seqnames) 
+}
+
+enhstats <- lapply(pks, function(x) {
+  y <- gr2bed2(x)
+  ints <- valr::bed_intersect(y, gr2bed2(ghgr))
+  nms <- unique(y$name)
+  tibble(
+    "names" = nms
+  ) %>%
+    mutate(inenh = ifelse(names %in% ints$name.x, "Enhancer", "non-Enhancer")) %>% 
+    group_by(inenh) %>% 
+    tally() %>% 
+    mutate(
+      prop = n / sum(n)
+    )
+}) %>% bind_rows(.id = "group")
+
+enhstats %>% 
+  mutate(group = factor(group, levels = rev(unique(.$group))),
+         inenh = factor(inenh, levels = rev(unique(.$inenh)))) %>% 
+  ggplot(aes(x = group, y = prop, fill=inenh)) +
+  geom_col() +
+  coord_flip() +
+  theme_gray(base_size = 14) +
+  theme(legend.title = element_blank()) +
+  ylab("Proportion of consensus peaks") +
+  xlab(NULL) +
+  ggtitle("Proportion of S9.6 and dRNH peaks found at any enhancers")
+
+plt <- ChIPpeakAnno::binOverFeature(
+  pks3$`dRNH-shared`, pks3$`dRNH-only`, pks3$S9.6,
   annotationData=ghgr,
   radius=5000, nbins=100, FUN=length, errFun = 0,
   xlab="Distance from Enh (bp)", ylab="count", 
-  main=c("dRNH-shared", "dRNH-only", "S9.6-shared", "S9.6-only")
+  main=c("dRNH-shared", "dRNH-only", "S9.6")
 )
+plt %>%
+  as.data.frame() %>% 
+  rownames_to_column("pos") %>% 
+  as_tibble() %>% 
+  mutate(pos = as.numeric(pos)) %>% 
+  dplyr::rename("dRNH-shared"=2, "dRNH-only"=3, "S9.6"=4) %>% 
+  pivot_longer(cols = ! contains("pos")) %>% 
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype="dashed", alpha=.25) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Consensus peak pileup around all enhancers") +
+  ylab("Peak density") +
+  xlab("Distance to any enhancer (bp) (5->3)") +
+  theme_bw(14) +
+  theme(legend.title = element_blank()) +
+  scale_color_manual(values = c("dRNH-only" = "#e2a3e3", "dRNH-shared" = "#ccb6cc", "S9.6" = "#82d0e8")) 
 
 ## Overlap of dRNH-only & S9.6-only & dENH
-olde <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, pks$`dRNH-only`, pks$`S9.6-only`)
-ChIPpeakAnno::makeVennDiagram(olde, NameOfPeaks = c("Distal Enh", "dRNH-only", "S9.6-only"))
-ChIPpeakAnno::binOverFeature(
-  pks3$`dRNH-shared`, pks3$`dRNH-only`, pks3$`S9.6-shared`, pks3$`S9.6-only`,
+# olde <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, pks$`dRNH-only`, pks$`dRNH-shared`, pks$S9.6)
+# ChIPpeakAnno::makeVennDiagram(olde, NameOfPeaks = c("Distal Enh", "dRNH-only", "dRNH-shared", "S9.6"))
+enhstats <- lapply(pks, function(x) {
+  y <- gr2bed2(x)
+  ints <- valr::bed_intersect(y, gr2bed2(dEnh))
+  nms <- unique(y$name)
+  tibble(
+    "names" = nms
+  ) %>%
+    mutate(inenh = ifelse(names %in% ints$name.x, "Enhancer", "non-Enhancer")) %>% 
+    group_by(inenh) %>% 
+    tally() %>% 
+    mutate(
+      prop = n / sum(n)
+    )
+}) %>% bind_rows(.id = "group")
+
+enhstats %>% 
+  mutate(group = factor(group, levels = rev(unique(.$group))),
+         inenh = factor(inenh, levels = rev(unique(.$inenh)))) %>% 
+  ggplot(aes(x = group, y = prop, fill=inenh)) +
+  geom_col() +
+  coord_flip() +
+  theme_gray(base_size = 14) +
+  theme(legend.title = element_blank()) +
+  ylab("Proportion of consensus peaks") +
+  xlab(NULL) +
+  ggtitle("Proportion of S9.6 and dRNH peaks found at distal enhancers")
+plt <- ChIPpeakAnno::binOverFeature(
+  pks3$`dRNH-shared`, pks3$`dRNH-only`, pks3$S9.6,
   annotationData=dEnh,
   radius=5000, nbins=100, FUN=length, errFun = 0,
   xlab="Distance from dEnh (bp)", ylab="count", 
-  main=c("dRNH-shared", "dRNH-only", "S9.6-shared", "S9.6-only")
+  main=c("dRNH-shared", "dRNH-only", "S9.6")
 )
-
+plt %>%
+  as.data.frame() %>% 
+  rownames_to_column("pos") %>% 
+  as_tibble() %>% 
+  mutate(pos = as.numeric(pos)) %>% 
+  dplyr::rename("dRNH-shared"=2, "dRNH-only"=3, "S9.6"=4) %>% 
+  pivot_longer(cols = ! contains("pos")) %>% 
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype="dashed", alpha=.25) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Consensus peak pileup around distal enhancers") +
+  ylab("Peak density") +
+  xlab("Distance to distal enhancer (bp) (5->3)") +
+  theme_bw(14) +
+  theme(legend.title = element_blank()) +
+  scale_color_manual(values = c("dRNH-only" = "#e2a3e3", "dRNH-shared" = "#ccb6cc", "S9.6" = "#82d0e8")) 
+  
 
 ## Overlap of intergenic dRNH-only & S9.6-only & dENH
 pks4 <- lapply(seq(length(pks)), function(i) {
   pks[[i]][which(peakAnnoList[[i]]@detailGenomicAnnotation$Intergenic),]
 })
 names(pks4) <- names(pks)
-olde2 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, pks4$`dRNH-only`, pks4$`S9.6-only`)
-ChIPpeakAnno::makeVennDiagram(olde2, NameOfPeaks = c("Distal Enh", "dRNH-only (IG)", "S9.6-only (IG)"))
+olde2 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, pks4$`dRNH-only`, pks4$`dRNH-shared`, pks4$S9.6)
+ChIPpeakAnno::makeVennDiagram(olde2, NameOfPeaks = c("Distal Enh", "dRNH-only (IG)", "dRNH-shared (IG)", "S9.6 (IG)"))
 ChIPpeakAnno::binOverFeature(
-  pks4$`dRNH-shared`, pks4$`dRNH-only`, pks4$`S9.6-shared`, pks4$`S9.6-only`,
+  pks4$`dRNH-shared`, pks4$`dRNH-only`, pks4$S9.6,
   annotationData=dEnh,
   radius=5000, nbins=100, FUN=length, errFun = 0,
   xlab="Distance from dEnh (bp)", ylab="count", 
-  main=c("dRNH-shared (IG)", "dRNH-only (IG)", "S9.6-shared (IG)", "S9.6-only (IG)")
+  main=c("dRNH-shared (IG)", "dRNH-only (IG)","S9.6 (IG)")
 )
-
 
 
 ### Step 2: What are the genes which these dENH's interact with?
 topdRNH <- pks4$`dRNH-only`
 olde3 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, topdRNH)
-ChIPpeakAnno::makeVennDiagram(olde3)
+ChIPpeakAnno::makeVennDiagram(olde3, NameOfPeaks = c("Distal-Enhancers", "dRNH-only"), margin=.1, cat.pos=c(270, 90))
 dENH_dRNH <- olde3$overlappingPeaks$`dEnh///topdRNH`$name
 ghfull %>% 
   filter(
@@ -882,7 +875,7 @@ pks <- lapply(
 )
 
 # Look at overlap between dENH and predicted enhancers
-dd <- reduce(do.call("c", unlist(pks, use.names = FALSE)))
+dd <- GenomicRanges::reduce(do.call("c", unlist(pks, use.names = FALSE)))
 ol1 <- ChIPpeakAnno::findOverlapsOfPeaks(dd, dEnh)
 ChIPpeakAnno::makeVennDiagram(ol1)
 
@@ -1032,7 +1025,7 @@ plt <- plttbl %>%
   theme_bw(base_size = 14) +
   ylab(NULL) +
   xlab(NULL) +
-  ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
+  ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
 
 eres <- enrichr(genesNow, databases = "ChEA_2016")
@@ -1095,7 +1088,7 @@ plt <- plttbl %>%
   theme_bw(base_size = 14) +
   ylab(NULL) +
   xlab(NULL) +
-  ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in ARCHS4 TF Database")
+  ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in ARCHS4 TF Database")
 plt
 
 #### Step #5: Analyze relationship with eRNA 
@@ -1229,7 +1222,7 @@ bind_rows(d1, d2) %>%
 
 
 ### CUTLL1
-
+ct <- "CUTLL1"
 gro1 <- valr::read_bigwig(
   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_forward.bw",
   set_strand = "*"
