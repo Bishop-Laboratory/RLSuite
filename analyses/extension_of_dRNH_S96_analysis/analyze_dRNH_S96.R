@@ -11,6 +11,10 @@ annFull <- RLHub::annots_full_hg38()
 
 ###############
 
+##### Analysis of peak sizes and locations dRNH vs S9.6 #####
+
+### Step #1: Find the difference in sizes between shared/non-shared consensus peaks
+
 ## Read in peaks
 drnh_cons <- read_tsv(
   file.path(RLSeq:::RLBASE_URL, "misc", "rlregions_dRNH.narrowPeak"),
@@ -19,7 +23,7 @@ drnh_cons <- read_tsv(
     "strand", "signalVal", "pVal", "qVal", "peak"
   ), 
   show_col_types = FALSE, progress = FALSE
-)
+) 
 s96_cons <- read_tsv(
   file.path(RLSeq:::RLBASE_URL, "misc", "rlregions_S96.narrowPeak"),
   col_names = c(
@@ -62,23 +66,177 @@ cons2 <- list(
 
 
 ## Density plot of peak sizes
+minmax <- function(x) (x- min(x)) /(max(x)-min(x))
 pltdat <- bind_rows(cons2, .id = "group") %>%
   mutate(
     width = end - start
   ) %>% 
-  filter(group != "Shared")
-mu <- pltdat %>% group_by(group) %>% summarise(mu=median(width))
-plt <- ggplot(pltdat, aes(x = width, color = group, fill = group)) +
-  geom_density(alpha=.3, adjust=2) +
-  scale_x_log10(expand=c(0,0)) +
-  scale_y_continuous(expand=c(0,0)) +
+  filter(group != "Shared") %>% 
+  mutate(
+    pct_cons = case_when(
+      grepl(group, pattern = "dRNH") ~ 100 * ((score / 10) / ndrnh),
+      grepl(group, pattern = "S9.6") ~ 100 * ((score / 10) / ns96)
+    ),
+    pct_rank = minmax(rank(pct_cons)),
+    group2 = ifelse(grepl(group, pattern = "S9.6"), "S9.6", group)
+  )
+mu <- pltdat %>% group_by(group2) %>% summarise(mu=mean(width))
+mu
+plt <- ggplot(pltdat, aes(y = width, x=group2, color = group2)) +
+  geom_violin(width = .6) +
+  geom_boxplot(width = .2) +
+  # ggridges::geom_density_ridges(alpha=.3) +
+  scale_y_log10() +
   theme_classic(base_size = 18) +
-  ylab("Frequency") + xlab("Peak width (bp)") +
-  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL))
+  ylab("Peak width (bp)") +
+  xlab(NULL) +
+  ggtitle("Peak width across groups", subtitle = "Consensus peaksets") +
+  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("dRNH-only", "dRNH-shared")),
+    method.args = list(alternative="less")
+  )
 plt
+
+## Density plot of peak strengths
+mu <- pltdat %>% group_by(group2) %>% summarise(mu=mean(pct_cons))
+mu
+plt <- ggplot(pltdat, aes(y = pct_cons, x=group2, color = group2)) +
+  geom_violin(width = .6) +
+  geom_boxplot(width = .2) +
+  # ggridges::geom_density_ridges(alpha=.3) +
+  scale_y_log10() +
+  theme_classic(base_size = 18) +
+  ylab("Peak width (bp)") +
+  xlab(NULL) +
+  ggtitle("Peak conservation % across groups", subtitle = "Consensus peaksets") +
+  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("dRNH-only", "dRNH-shared")),
+    method.args = list(alternative="less")
+  )
+plt
+
+
 
 # TODO: If the R-loop is stronger and more conserved, easier for S9.6 to see it (look at expression / RNAPII)
 
+
+
+### Step #2: Repeat the size/strength analysis using the underlying peaks
+
+rlrm <- RLHub::rlregions_meta()
+
+## Find the peaks that go into each group
+locpat <- "(.+):(.+)\\-(.+):(.+)"
+rlr <- rlrm %>% 
+  select(
+    location, samples
+  ) %>% 
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3"))
+  ) %>% 
+  select(-location)
+pltdat2 <- select(pltdat, group, group2, chrom, start, end, peak, width, pct_cons, name)
+pltint <- valr::bed_intersect(pltdat2, rlr)
+
+### Substep: Get the peak sizes overlapping each
+
+rlsamps <- RLHub::rlbase_samples()
+rlgood <- rlsamps %>%
+  filter(
+    ip_type %in% c("dRNH", "S9.6"),
+    genome == "hg38",
+    label == "POS",
+    prediction == "POS",
+    numPeaks > 5000
+  )
+
+i <- 62
+
+reslst <- pbapply::pblapply(
+  seq(nrow(rlgood)), function(i) {
+    message(i)
+    samp <- rlgood$rlsample[i]
+    ip_type <- rlgood$ip_type[i]
+    mode <- rlgood$mode[i]
+    peak <- paste0("../RLBase-data/rlbase-data/rlpipes-out/peaks/", samp, "_hg38.broadPeak")
+    pk <- valr::read_broadpeak(peak) %>% 
+      mutate(width = end - start) %>% 
+      slice_sample(n = 5000)
+    pkint <- valr::bed_intersect(pltdat, pk) %>% 
+      select(
+        group = group.x, group2=group2.x, rlr_name=name.x, pk_name=name.y, 
+        pk_width=width.y, pk_signal=signal.y, pk_pval=pvalue.y, pk_qval=qvalue.y
+      ) %>% 
+      filter(if ({{ ip_type }} == "S9.6") grepl(group, pattern = "S9.6") else grepl(group, pattern = "dRNH"))
+    pkint
+  }
+)
+
+restbl <- reslst %>% 
+  bind_rows()
+
+restbl2 <- restbl %>% 
+  filter(pk_width > 0)
+
+mu <- restbl2 %>% group_by(group2) %>% summarise(mu=mean(pk_width))
+mu
+plt <- ggplot(restbl2, aes(y = pk_width, x=group2, color = group2)) +
+  geom_violin(width =.6) +
+  geom_boxplot(width=.2) +
+  scale_y_log10() +
+  theme_classic(base_size = 18) +
+  ylab("Peak width (log10 bp)") + xlab("Group") +
+  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
+  ggtitle("Peak width across groups", subtitle = "Individual peaksets (underlying peak data)") +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("dRNH-only", "dRNH-shared")),
+    method.args = list(alternative="less")
+  )
+plt
+
+mu <- restbl2 %>% group_by(group2) %>% summarise(mu=mean(pk_qval))
+mu
+plt <- ggplot(restbl2, aes(y = pk_qval, x=group2, color = group2)) +
+  geom_violin(width =.6) +
+  geom_boxplot(width=.2) +
+  theme_classic(base_size = 18) +
+  scale_y_log10() +
+  ylab("Peak strength (log10 p.adj val)") + xlab("Group") +
+  guides(fill=guide_legend(title=NULL), color=guide_legend(title=NULL)) +
+  ggtitle("Peak stength across groups", subtitle = "Individual peaksets (underlying peak data)") +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("dRNH-only", "dRNH-shared")),
+    method.args = list(alternative="less")
+  )
+plt
+
+
+#### Proportion test
+### What prop of dRNH-detected R-loops are also detected by S9.6?
+### What prop of S9.6-detected R-loops are also detected by dRNH?
+### Check with pie charts or Bar charts
+pltdat %>% 
+  group_by(group) %>% 
+  tally() %>% 
+  mutate(group2 = gsub(group, pattern = "\\-.+", replacement = ""),
+         group3 = gsub(group, pattern = ".+\\-", replacement = "")) %>% 
+  group_by(group2) %>% 
+  mutate(prop = n / sum(n)) %>% 
+  ggplot(aes(x = group2, y = prop, fill=group3)) +
+  geom_col() +
+  coord_flip() +
+  theme_gray(base_size = 13) +
+  ylab("Proportion of consensus peaks") +
+  xlab(NULL)
+
+
+#### Analysis of Tx Features
+### What are the features overlapping consensus peaks in each group?
+### How does this relate to peak size/strength?
 
 ## Compare samples around genomic features
 consInt2 <- lapply(cons2, function(x) {
@@ -175,7 +333,6 @@ plt
 
 
 ## Density plot of peak scores
-minmax <- function(x) (x- min(x)) /(max(x)-min(x))
 consInt3 <- consInt2 %>%
   group_by(group) %>% 
   mutate(
@@ -526,6 +683,8 @@ write_csv(tibble(genesNow), file = "analyses/extension_of_dRNH_S96_analysis/dEnh
 
 #### Step #3: Tissue-specific enhancer analysis ####
 
+dat <- RLHub::rlbase_samples()
+
 ### CUTLL1
 
 ct <- "CUTLL1"
@@ -559,16 +718,16 @@ gris <- lapply(seq(pal), function(i) {
 })
 names(gris) <- names(pal)
 
-# # Test enrichment within dEnh
-# olde <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, gris[[1]], gris[[2]])
-# ChIPpeakAnno::makeVennDiagram(olde, NameOfPeaks = c("Enh", names(gris)[1], names(gris)[2]))
-# ChIPpeakAnno::binOverFeature(
-#   gris[[1]], gris[[2]],
-#   annotationData=dEnh,
-#   radius=5000, nbins=100, FUN=length, errFun = 0,
-#   xlab="Distance from Enh (bp)", ylab="count", 
-#   main=c(names(gris)[1], names(gris)[2])
-# )
+# Test enrichment within dEnh
+olde <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh, gris[[1]], gris[[2]])
+ChIPpeakAnno::makeVennDiagram(olde, NameOfPeaks = c("Enh", names(gris)[1], names(gris)[2]))
+ChIPpeakAnno::binOverFeature(
+  gris[[1]], gris[[2]],
+  annotationData=dEnh,
+  radius=5000, nbins=100, FUN=length, errFun = 0,
+  xlab="Distance from Enh (bp)", ylab="count",
+  main=c(names(gris)[1], names(gris)[2])
+)
 
 ## Find the specific Enh
 # Get the intergenic peaks from both iPSC samples & find overlap
@@ -587,7 +746,7 @@ ghfull %>%
 unique(dd$genes) -> genesNow
 genesNow
 eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
-num_sel <- 8
+num_sel <- 6
 eres[[1]] %>%
   as_tibble() %>%
   slice_min(P.value, n = num_sel)
@@ -667,7 +826,7 @@ ghfull %>%
 unique(dd$genes) -> genesNow
 genesNow
 eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
-num_sel <- 8
+num_sel <- 6
 eres[[1]] %>%
   as_tibble() %>%
   slice_min(P.value, n = num_sel)
@@ -696,7 +855,6 @@ plt <- plttbl %>%
   xlab(NULL) +
   ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
-
 
 
 #### Step #4: Chromatin State Analysis (poised vs active enhancers) ####
@@ -734,7 +892,6 @@ ChIPpeakAnno::makeVennDiagram(ol1)
 ct <- "iPSCs"
 
 ## Load in the data
-dat <-  RLHub::rlbase_samples() 
 ctl <- dat %>%
   filter(
     ip_type == "dRNH",
@@ -848,7 +1005,7 @@ permalink
 
 
 eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
-num_sel <- 8
+num_sel <- 6
 eres[[1]] %>%
   as_tibble() %>%
   slice_min(P.value, n = num_sel)
@@ -879,7 +1036,7 @@ plt <- plttbl %>%
 plt
 
 eres <- enrichr(genesNow, databases = "ChEA_2016")
-num_sel <- 8
+num_sel <- 6
 eres[[1]] %>%
   as_tibble() %>%
   slice_min(P.value, n = num_sel)
@@ -911,7 +1068,7 @@ plt
 
 
 eres <- enrichr(genesNow, databases = "ARCHS4_TFs_Coexp")
-num_sel <- 8
+num_sel <- 6
 eres[[1]] %>%
   as_tibble() %>%
   slice_min(P.value, n = num_sel)
@@ -943,9 +1100,8 @@ plt
 
 #### Step #5: Analyze relationship with eRNA 
 
-
+chain <-  'data/hg38_to_hg19.chain.gz'
 if (! file.exists(gsub(chain, pattern="\\.gz", replacement=""))) {
-  chain <-  'data/hg38_to_hg19.chain.gz'
   download.file("http://hgdownload.cse.ucsc.edu/goldenpath/hg38/liftOver/hg38ToHg19.over.chain.gz", destfile = chain)
   R.utils::gunzip(chain)
 }
@@ -961,7 +1117,6 @@ gro2 <- read_tsv(
   col_names = c("chrom", "start", "end", "score")
 )
 
-
 int <- valr::bed_intersect(gro1, gro2)
 gro <- int %>% 
   mutate(score = score.x + score.y) %>% 
@@ -970,6 +1125,7 @@ gro <- int %>%
 
 chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
 dEnh2hg19 <- rtracklayer::liftOver(dEnh2, chain = chn) %>% unlist()
+dEnh2hg19 <- dEnh2hg19[! duplicated(names(dEnh2hg19)),]
 
 dEnh2_min <- as.data.frame(dEnh2hg19) %>% 
   as_tibble() %>% 
@@ -981,7 +1137,6 @@ intGRO <- int %>%
   summarise(GRO = sum(score.x)) %>% 
   dplyr::rename(name=name.y)
 # Get RPKM
-intGRO
 dEnh_min2 <- dEnh2_min %>% mutate(width = end - start)
 intGRO <- inner_join(intGRO, select(dEnh_min2, name, width)) %>% 
   mutate(
@@ -1007,14 +1162,14 @@ grihg19 <- rtracklayer::liftOver(gri, chain = chn) %>% unlist()
 # Overlap with iPSC peaks
 olde4 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh3, grihg19)
 ChIPpeakAnno::makeVennDiagram(olde4)
-d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM %>% #[olde4$overlappingPeaks$`dEnh3///gri`$pName == "EnhBiv"] %>% 
+d1 <- olde4$overlappingPeaks$`dEnh3///grihg19`$RPKM %>%  
   tibble() %>% 
   dplyr::rename(value=1) %>% 
   mutate(
     cond = "dRNH-accessible"
   )
 
-d2 <- olde4$all.peaks$dEnh3$RPKM %>% #[ olde4$all.peaks$dEnh3$pName == "EnhBiv"] %>%
+d2 <- olde4$all.peaks$dEnh3$RPKM %>% 
   tibble() %>% 
   dplyr::rename(value=1) %>% 
   mutate(
@@ -1079,18 +1234,18 @@ gro1 <- valr::read_bigwig(
   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_forward.bw",
   set_strand = "*"
 )
-# gro2 <- valr::read_bigwig(
-#   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_reverse.bw",
-#   set_strand = "*"
-# ) %>% mutate(score=-1*score)
+gro2 <- valr::read_bigwig(
+  "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_DMSO_reverse.bw",
+  set_strand = "*"
+) %>% mutate(score=-1*score)
 gro3 <- valr::read_bigwig(
   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_00h_forward.bw",
   set_strand = "*"
 )
-# gro4 <- valr::read_bigwig(
-#   "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_00h_reverse.bw",
-#   set_strand = "*"
-# ) %>% mutate(score=-1*score)
+gro4 <- valr::read_bigwig(
+  "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE115nnn/GSE115894/suppl/GSE115894_00h_reverse.bw",
+  set_strand = "*"
+) %>% mutate(score=-1*score)
 
 gro <- valr::bed_merge(bind_rows(list(
   gro1, 
@@ -1099,13 +1254,6 @@ gro <- valr::bed_merge(bind_rows(list(
   gro4
 )), score = sum(score))
 
-chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
-dEnh2hg19 <- rtracklayer::liftOver(dEnh2, chain = chn) %>% unlist()
-
-dEnh2_min <- as.data.frame(dEnh2hg19) %>% 
-  as_tibble() %>% 
-  mutate(name = names(dEnh2hg19)) %>% 
-  select(chrom=seqnames, start, end, name)
 int <- valr::bed_intersect(gro, dEnh2_min)
 intGRO <- int %>%
   group_by(name.y) %>% 
@@ -1113,7 +1261,6 @@ intGRO <- int %>%
   dplyr::rename(name=name.y)
 # Get RPKM
 intGRO
-dEnh_min2 <- dEnh2_min %>% mutate(width = end - start)
 intGRO <- inner_join(intGRO, select(dEnh_min2, name, width)) %>% 
   mutate(
     RPKM = GRO /
@@ -1156,7 +1303,6 @@ d2 <- olde4$all.peaks$dEnh3$RPKM %>% #[ olde4$all.peaks$dEnh3$pName == "EnhBiv"]
 bind_rows(d1, d2) %>%
   ggplot(aes(y = value, x = cond)) +
   geom_boxplot() +
-  scale_y_log10() +
   ggpubr::stat_compare_means(
     method.args = list(alternative="greater"),
     comparisons = list(c("dRNH-accessible", "Total dEnh")),
