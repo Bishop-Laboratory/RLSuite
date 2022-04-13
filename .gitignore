@@ -21,6 +21,7 @@ RSeq_out*
 *.fastq
 *.png
 *.bam
+*.bb
 .Rprofile
 *.bw
 *.bedGraph

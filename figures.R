@@ -1495,7 +1495,7 @@ ggsave(plt, filename = "results/Figure_5/pause_index.svg", height = 6, width = 6
 
 
 ## Percent of genome
-locpat
+locpat <- "(.+):(.+)-(.+):(.+)"
 rlgr <- rlregions %>%
   dplyr::select(location) %>%
   mutate(
