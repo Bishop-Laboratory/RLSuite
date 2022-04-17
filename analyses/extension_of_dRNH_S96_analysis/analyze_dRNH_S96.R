@@ -653,12 +653,19 @@ grs <- lapply(ctl$rlsample, function(x) {
 })
 names(grs) <- ctl$rlsample
 
+
 ## Analyze feature distribution
 pal <- lapply(
   grs, annotatePeak,
   TxDb = txdb,
   tssRegion = c(-3000, 3000), verbose = T
 )
+gris <- lapply(seq(pal), function(i) {
+  grs[[i]][pal[[i]]@detailGenomicAnnotation$Intergenic, ]
+})
+names(gris) <- names(pal)
+gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+gri <- gri[which(sapply(gri$revmap, length) > 1), ]
 
 ## Find overlaps with enhancers
 
@@ -791,6 +798,8 @@ gris <- lapply(seq(pal), function(i) {
   grs[[i]][pal[[i]]@detailGenomicAnnotation$Intergenic, ]
 })
 names(gris) <- names(pal)
+gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+gri <- gri[which(sapply(gri$revmap, length) > 1), ]
 
 # Test enrichment within dEnh
 pltd <- ChIPpeakAnno::binOverFeature(
@@ -886,6 +895,7 @@ fls <- list(
   "HCT116" = "https://www.encodeproject.org/files/ENCFF513PJK/@@download/ENCFF513PJK.bed.gz",
   "iPSCs" = "https://www.encodeproject.org/files/ENCFF115RIR/@@download/ENCFF115RIR.bed.gz"
 )
+
 
 # Get track for hg19 chromHMM
 # iPSChg19 <- "https://www.encodeproject.org/files/ENCFF197OWG/@@download/ENCFF197OWG.bed.gz"
@@ -1109,125 +1119,13 @@ bigbiv[len>1,] %>%
     con = "tmp/enh_clusters.bed"
   )
 
-system(
-  paste0(
-    '~/miniconda3/condabin/conda run -n rlbaseData computeMatrix scale-regions ',
-    '-S "analyses/extension_of_dRNH_S96_analysis/iPSC_GROSeq_comb.bw" ',
-    '"analyses/extension_of_dRNH_S96_analysis/iPSC_MapR_comb.bw" ',
-    'tmp/GSE136857_iPSC_IDR.bw ',
-    # 'tmp/ENCFF645JYS.bigWig tmp/ENCFF402HIK.bigWig ',
-    'tmp/rlregions_dRNH.hg19.bw.bw tmp/rlregions_S96.hg19.bw.bw -R ',
-    'tmp/bivenh_clusters.bed tmp/enh_clusters.bed -m 15000 -a 15000 -b 15000 -bs 300 -o ',
-    'tmp/enh_clusters.mat.gz -p 44'
-  )
-)
-
-n <- 5
-
-mat <- read_tsv("tmp/enh_clusters.mat.gz", skip = 1, col_names = FALSE)
-meta <- read_lines("tmp/enh_clusters.mat.gz")[1]
-meta <- gsub(meta, pattern = "@", replacement = "")
-meta <- jsonlite::parse_json(meta)
-
-colnames(mat)[1:6] <- c("chrom", "start", "end", "name", "score", "strand")
-colnames(mat)[7:(6+(n*150))] <- paste0(
-  rep(
-    c(
-      "GRO", 
-      "MapR",
-      "ATAC",
-      # "H3K27me3",
-      # "H3K4me1",
-      "dRNH",
-      "S96"
-    ), each=150
-  ),
-  "__",
-  rep(1:50, n*3),
-  "__",
-  rep(1:150, n),
-  "__",
-  rep(rep(c("a", "m", "b"), each=50), n)
-)
-
-mlong <- mat %>% pivot_longer(cols = contains("__"), names_to = "NAMES")
-lpat <- "(.+)__(.+)__(.+)__(.+)"
-mlong <- mlong %>% 
-  mutate(
-    ip=gsub(NAMES, pattern = lpat, replacement = "\\1"),
-    pos = gsub(NAMES, pattern = lpat, replacement = "\\2"),
-    posful =  gsub(NAMES, pattern = lpat, replacement = "\\3"),
-    posgroup = gsub(NAMES, pattern = lpat, replacement = "\\4"),
-    value = as.numeric(case_when(value == "NaN" ~ 0, TRUE ~ value))
-  )
-
-sums <- mlong %>%
-  group_by(ip) %>% 
-  summarise(val=sum(value))
-
-mlong2 <- inner_join(mlong, sums)
-mlong3 <- mlong2 %>%
-  mutate(value_scale = round(1000000*(value / val), digits = 6))
-pltdat <- mlong3 %>% 
-  group_by(ip, posful) %>% 
-  summarise(value_scale2 = mean(value_scale))
-pltdat %>% 
-  ggplot(aes(x = posful, y = value_scale2, color=ip, group=ip)) +
-  geom_line()
-
-mwide <- mlong3 %>% 
-  select(-value, -ip, -pos, -posful, -posgroup, -val) %>% 
-  pivot_wider(names_from = NAMES, values_from = value_scale)
-
-write_tsv(mwide, file = "tmp/enh_clusters2.mat", col_names = FALSE)
-system("zcat tmp/enh_clusters.mat.gz | head -n 1 > tmp/enh_clusters3.mat && cat tmp/enh_clusters2.mat >> tmp/enh_clusters3.mat && gzip -f tmp/enh_clusters3.mat")
-system(
-  paste0(
-    '~/miniconda3/condabin/conda run -n rlbaseData plotHeatmap --matrixFile ',
-    'tmp/enh_clusters3.mat.gz --outFileName tmp/enh_clusters.png ',
-    '-z "Bivalent enhancers" "All Enhancers" --samplesLabel "iPSC GRO-Seq" ',
-    '"iPSC MapR" "iPSC ATAC-Seq" "dRNH consensus" "S9.6 consensus" ',
-    '--startLabel	"start" --endLabel "end" --heatmapWidth 6 --colorMap "plasma"'
-  )
-)
-
-# Calculate clusters for bivalent enhancers
-pkchrom <- pkschrom$iPSCs 
-pkbiv <- pkchrom[pkchrom$name == "EnhBiv",]
-pkbivhg19 <- rtracklayer::liftOver(pkbiv, chain = chn) %>% unlist()
-pkbivhg19 <- unique(pkbivhg19)
-bigbiv <- (pkbivhg19 + 5000) %>% GenomicRanges::reduce(with.revmap=T)
-len <- sapply(bigbiv$revmap, length)
-bigbiv[len>1,] %>% 
-  rtracklayer::export(
-    con = "tmp/bivenh_clusters.bed"
-  )
-
-system(
-  paste0(
-    '~/miniconda3/condabin/conda run -n rlbaseData computeMatrix scale-regions ',
-    '-S "analyses/extension_of_dRNH_S96_analysis/iPSC_GROSeq_comb.bw" ',
-    '"analyses/extension_of_dRNH_S96_analysis/iPSC_MapR_comb.bw" ',
-    'tmp/GSE136857_iPSC_IDR.bw tmp/ENCFF645JYS.bigWig tmp/ENCFF402HIK.bigWig ',
-    'tmp/rlregions_dRNH.hg19.bw.bw tmp/rlregions_S96.hg19.bw.bw -R ',
-    '"tmp/bivenh_clusters.bed" -m 15000 -a 15000 -b 15000 -bs 300 -o ',
-    'tmp/bivenh_clusters.mat.gz -p 44'
-  )
-)
-
-# TODO: Add DRIP into 
-# TODO: Add 10KB bumpers
-
-
-# Convert S9.6 and dRNH consensus to hg19
-
-
-
 
 # Transfer labels to the dEnh from GH
 olpe <- ChIPpeakAnno::findOverlapsOfPeaks(
   pki, dEnh[dEnh$score > .5, ]
 )
+
+
 
 
 
@@ -1432,6 +1330,110 @@ ggsave(plt, filename = file.path(resloc, "iPSC_eRNA_expression_dENH.png"))
 # infile2 <- "analyses/extension_of_dRNH_S96_analysis/dRNHonly.sort.narrowPeak"
 # outfile <- "analyses/extension_of_dRNH_S96_analysis/dRNHonly.bb"
 # 
+
+
+### Prep genome browser session for showing this (HEK293)
+cs19 <- "https://hgdownload-test.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.chrom.sizes"
+download.file(cs19, destfile = "tmp/hg19.chrom.sizes")
+gen <- valr::read_genome("tmp/hg19.chrom.sizes")
+gen %>% mutate(start = 0, end = size) -> dd
+wins <- valr::bed_makewindows(x = dd, win_size = 50)
+gro1p <- valr::read_bigwig("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2551nnn/GSM2551016/suppl/GSM2551016_GROseq_noDRB_rep1.p.bw", set_strand = "+")
+gro1m <- valr::read_bigwig("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2551nnn/GSM2551016/suppl/GSM2551016_GROseq_noDRB_rep1.m.bw", set_strand = "-")
+gro2p <- valr::read_bigwig("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2551nnn/GSM2551017/suppl/GSM2551017_GROseq_noDRB_rep2.p.bw", set_strand = "+")
+gro2m <- valr::read_bigwig("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2551nnn/GSM2551017/suppl/GSM2551017_GROseq_noDRB_rep2.m.bw", set_strand = "-")
+
+gm1p <- valr::bed_map(wins, gro1p, score2 = mean(score))
+gm1p2 <- mutate(gm1p, score2 = ifelse(is.na(score2), 0, score2))
+gm1m <- valr::bed_map(wins, gro1m, score2 = mean(score))
+gm1m2 <- mutate(gm1m, score2 = ifelse(is.na(score2), 0, score2))
+gm2p <- valr::bed_map(wins, gro2p, score2 = mean(score))
+gm2p2 <- mutate(gm2p, score2 = ifelse(is.na(score2), 0, score2))
+gm2m <- valr::bed_map(wins, gro2m, score2 = mean(score))
+gm2m2 <- mutate(gm2m, score2 = ifelse(is.na(score2), 0, score2))
+
+GRO <- select(gm1p, chrom, start, end)
+GRO$score <- (gm1p2$score2 + gm1m2$score2 + gm2p2$score2 + gm2m2$score2) / 4
+infile <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_GROSeq_comb.bdg")
+infile2 <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_GROSeq_comb.sort.bdg")
+outfile <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_GROSeq_comb.bw")
+GRO %>% write_tsv(infile, col_names = FALSE)
+system(paste0("tail -n +2 ", infile, " | sort -k1,1 -k2,2n > ", infile2))
+system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedGraphToBigWig ", infile2, " tmp/chrom.sizes ", outfile))
+aws.s3::put_object(file = outfile, object = paste0("misc/", ct, "_GROSeq_comb.bw"), bucket = RLSeq:::RLBASE_S3, multipart = TRUE, show_progress = TRUE)
+
+## Do the HEK293 MapR
+bws <- lapply(
+  ctl$rlsample, function(x) {
+    message(x)
+    bw <- paste0("../RLBase-data/rlbase-data/rlpipes-out/coverage/", x, "_hg38.bw")
+    bw <- valr::read_bigwig(bw, set_strand = "*")
+    bw
+  }
+)
+
+# Lift over
+bws2 <- lapply(seq(bws), function(i) {
+  message(i)
+  x <- bws[[i]]
+  gr <- x %>%
+    GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = T)
+  lo <- rtracklayer::liftOver(gr, chain = chn)
+  lo %>%
+    unlist() %>%
+    as_tibble() %>%
+    dplyr::rename(chrom = seqnames)
+})
+
+# Map to windows
+bws3 <- parallel::mclapply(seq(bws2), function(i) {
+  message(i)
+  x <- bws2[[i]] %>%
+    select(-width) %>%
+    dplyr::relocate(score, .before = strand)
+  valr::bed_map(wins, x, score2 = mean(score))
+}, mc.cores = 4)
+bws4 <- parallel::mclapply(which(sapply(bws3, is.null)), function(i) {
+  message(i)
+  x <- bws2[[i]] %>%
+    select(-width) %>%
+    dplyr::relocate(score, .before = strand)
+  valr::bed_map(wins, x, score2 = mean(score))
+}, mc.cores = length(which(sapply(bws3, is.null))))
+bws5 <- c(bws3, bws4)
+
+# Combine
+infile <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_MapR_comb.bdg")
+infile2 <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_MapR_comb.sort.bdg")
+outfile <- paste0("analyses/extension_of_dRNH_S96_analysis/", ct, "_MapR_comb.bw")
+bws5 <- bws5[sapply(bws5, function(x) ! is.null(x))]
+ipsrl <- bws5[[1]]
+ipsrl$score <- (bws5[[1]]$score2 + bws5[[2]]$score2 + bws5[[3]]$score2 + bws5[[4]]$score2) / 4
+ipsrl %>%
+  filter(!is.na(score)) %>%
+  select(chrom, start, end, score) %>%
+  write_tsv(file = infile, col_names = F)
+system(paste0("tail -n +2 ", infile, " | sort -k1,1 -k2,2n > ", infile2))
+system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedGraphToBigWig ", infile2, " tmp/chrom.sizes ", outfile))
+aws.s3::put_object(file = outfile, object = paste0("misc/", ct, "_MapR_comb.bw"), bucket = RLSeq:::RLBASE_S3, multipart = TRUE, show_progress = TRUE)
+
+
+# ## Upload the dRNH-only big bed
+# download.file("https://hgdownload-test.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.chrom.sizes", destfile = "tmp/chrom.sizes")
+# drnhhg19 <- cons2$`dRNH-only` %>%
+#   mutate(score = score / 10) %>%
+#   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = T) %>%
+#   rtracklayer::liftOver(chain = chn) %>%
+#   unlist() %>%
+#   as_tibble() %>%
+#   select(-width) %>%
+#   relocate(name, score, .before = strand) %>%
+#   mutate(strand = ".") %>%
+#   unique()
+# drnhhg19 %>% write_tsv("analyses/extension_of_dRNH_S96_analysis/dRNHonly.narrowPeak", col_names = F)
+# infile <- "analyses/extension_of_dRNH_S96_analysis/dRNHonly.narrowPeak"
+# infile2 <- "analyses/extension_of_dRNH_S96_analysis/dRNHonly.sort.narrowPeak"
+# outfile <- "analyses/extension_of_dRNH_S96_analysis/dRNHonly.bb"
 # 
 # # Re-upload hg19 versions of all consensus peaks
 # sapply(c("S96", "dRNH"), function(x) {
@@ -1864,5 +1866,416 @@ rbind(mutate(dd3, group = "Genic"), mutate(dd2, group = "Intergenic")) %>%
 
 
 
+# 
+# 
+# #### Step #3: Chromatin State Analysis (poised vs active enhancers) ####
+# 
+# fls <- list(
+#   "HEK293" = "https://www.encodeproject.org/files/ENCFF476TTU/@@download/ENCFF476TTU.bed.gz",
+#   "HCT116" = "https://www.encodeproject.org/files/ENCFF513PJK/@@download/ENCFF513PJK.bed.gz",
+#   "iPSCs" = "https://www.encodeproject.org/files/ENCFF115RIR/@@download/ENCFF115RIR.bed.gz"
+# )
+# 
+# # Get track for hg19 chromHMM
+# # iPSChg19 <- "https://www.encodeproject.org/files/ENCFF197OWG/@@download/ENCFF197OWG.bed.gz"
+# # infile <- "tmp/iPSC_chromhmm_enhbiv.bed"
+# # infile2 <- "tmp/iPSC_chromhmm_enhbiv.sort.bed"
+# # outfile <- "tmp/iPSC_chromhmm_enhbiv.sort.bb"
+# # iPSChg19 <- valr::read_bed12(iPSChg19)
+# # iPSChg19 %>% filter(name == "EnhBiv") %>% 
+# #   write_tsv("tmp/iPSC_chromhmm_enhbiv.bed", col_names = F)
+# # 
+# # system(paste0("tail -n +2 ", infile, " | sort -k1,1 -k2,2n > ", infile2))
+# # system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedToBigBed ", infile2, " tmp/chrom.sizes ", outfile))
+# # aws.s3::put_object(file = outfile, object = "misc/iPSC_hg19_enhbig.bb", bucket = RLSeq:::RLBASE_S3, multipart = TRUE, show_progress = TRUE)
+# 
+# # TODO: Add in the DRIPc data + DRIP data
+# # TODO: Look at the other places where you have this effect (look for biv enhancer pileup)
+# # TODO: To get the U pattern, do a signal metaplot around bivalent enhancer clusters -- should should GRO-SEq U shape
+# 
+# 
+# 
+# pkschrom <- lapply(
+#   fls, read_tsv,
+#   col_names = c(
+#     "chrom", "start", "end", "name",
+#     "score", "strand", "start2", "end2", "color"
+#   )
+# )
+# pkschrom <- lapply(
+#   pkschrom, function(x) {
+#     # Extract chromhmm predicted enhancers
+#     filter(x, str_detect(name, "Enh")) %>%
+#       GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+#   }
+# )
+# 
+# ### HEK293
+# 
+# ct <- "HEK293"
+# 
+# ## Load in the data
+# dat <- RLHub::rlbase_samples()
+# ctl <- dat %>%
+#   filter(
+#     ip_type == "dRNH",
+#     genome == "hg38",
+#     mode == "MapR",
+#     tissue == ct,
+#     label == "POS",
+#     prediction == "POS",
+#     numPeaks > 5000
+#   ) %>%
+#   slice_sample(n=5)
+# grs <- lapply(ctl$rlsample, function(x) {
+#   GenomicRanges::GRanges(RLSeq::RLRangesFromRLBase(x))
+# })
+# names(grs) <- ctl$rlsample
+# 
+# 
+# ## Analyze feature distribution
+# pal <- lapply(
+#   grs, annotatePeak,
+#   TxDb = txdb,
+#   tssRegion = c(-3000, 3000), verbose = T
+# )
+# gris <- lapply(seq(pal), function(i) {
+#   grs[[i]][pal[[i]]@detailGenomicAnnotation$Intergenic, ]
+# })
+# names(gris) <- names(pal)
+# gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+# gri <- gri[which(sapply(gri$revmap, length) > 1), ]
+# 
+# 
+# ## Find the specific Enh
+# txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene
+# # Get the intergenic peaks from both iPSC samples & find overlap
+# pki <- pkschrom[[ct]] %>%
+#   annotatePeak(TxDb = txdb, tssRegion = c(-3000, 3000), verbose = TRUE)
+# pki <- pkschrom[[ct]][pki@detailGenomicAnnotation$Intergenic, ]
+# pki <- pki[!pki$name %in% c("EnhG1", "EnhG2"), ]
+# 
+# # Transfer labels to the dEnh from GH
+# olpe <- ChIPpeakAnno::findOverlapsOfPeaks(
+#   pki, dEnh[dEnh$score > .5, ]
+# )
+# colnames(olpe$overlappingPeaks$`pki///dEnh`)[7] <- "pName"
+# dEnh2 <- olpe$overlappingPeaks$`pki///dEnh` %>%
+#   select(name, pName) %>%
+#   as_tibble() %>%
+#   group_by(name) %>%
+#   mutate(n = n()) %>%
+#   filter(n == 1) %>%
+#   select(-n) %>%
+#   inner_join(as.data.frame(dEnh)) %>%
+#   as.data.frame() %>%
+#   ChIPpeakAnno::toGRanges()
+# 
+# # Analyze dEnh and Peaks
+# olde3 <- ChIPpeakAnno::findOverlapsOfPeaks(dEnh2, gri)
+# d1 <- olde3$overlappingPeaks$`dEnh2///gri`$pName %>%
+#   tibble() %>%
+#   dplyr::rename(enh = 1) %>%
+#   group_by(enh) %>%
+#   tally() %>%
+#   mutate(`dRNH-accessible` = n / sum(n)) %>%
+#   select(-n)
+# plt <- olde3$all.peaks$dEnh2$pName %>%
+#   tibble() %>%
+#   dplyr::rename(enh = 1) %>%
+#   group_by(enh) %>%
+#   tally() %>%
+#   mutate(`Total dEnh` = n / sum(n)) %>%
+#   select(-n) %>%
+#   inner_join(d1) %>%
+#   pivot_longer(cols = !matches("^enh")) %>%
+#   ggplot(aes(fill = enh, y = value, x = name)) +
+#   geom_col() +
+#   coord_flip() +
+#   xlab(NULL) +
+#   ylab("Proportion of distal enhancers") +
+#   ggtitle(
+#     paste0(ct, " distal enhancer profile"),
+#     subtitle = "dRNH-accessible vs total enhancer population"
+#   ) +
+#   theme_gray(base_size = 14)
+# plt
+# ggsave(plt, filename = file.path(resloc, paste0(ct, "_dENH_types_prop.png")))
+# 
+# # For these overlapping peaks, what are they?
+# dENH_gri <- olde3$overlappingPeaks$`dEnh2///gri`
+# ghfull %>%
+#   filter(
+#     name %in% dENH_gri$peaks1[dENH_gri$pName %in% c("EnhBiv")],
+#     gene_scores > 5
+#   ) -> dd
+# unique(dd$genes) -> genesNow
+# genesNow
+# eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
+# eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel)
+# terms <- eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel) %>%
+#   filter(row_number() <= num_sel) %>%
+#   pull(Term)
+# terms <- unique(unlist(terms))
+# terms
+# plttbl <- eres[[1]] %>%
+#   as_tibble() %>%
+#   filter(Term %in% terms) %>%
+#   select(Term, combined_score = Combined.Score, padj = Adjusted.P.value)
+# plt <- plttbl %>%
+#   arrange(combined_score) %>%
+#   mutate(
+#     Term = factor(Term,
+#                   levels = unique(Term)
+#     )
+#   ) %>%
+#   filter(!is.na(Term)) %>%
+#   ggplot(aes(x = Term, y = combined_score)) +
+#   geom_col() +
+#   coord_flip() +
+#   theme_bw(base_size = 14) +
+#   ylab(NULL) +
+#   xlab(NULL) +
+#   ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in CellMarker Database")
+# plt
+# ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_cellmarker.png")))
+# 
+# eres <- enrichr(genesNow, databases = "ChEA_2016")
+# eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel)
+# terms <- eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel) %>%
+#   filter(row_number() <= num_sel) %>%
+#   pull(Term)
+# terms <- unique(unlist(terms))
+# terms
+# plttbl <- eres[[1]] %>%
+#   as_tibble() %>%
+#   filter(Term %in% terms) %>%
+#   select(Term, combined_score = Combined.Score, padj = Adjusted.P.value)
+# plt <- plttbl %>%
+#   arrange(combined_score) %>%
+#   mutate(
+#     Term = factor(Term,
+#                   levels = unique(Term)
+#     )
+#   ) %>%
+#   filter(!is.na(Term)) %>%
+#   ggplot(aes(x = Term, y = combined_score)) +
+#   geom_col(fill="#F58776") +
+#   coord_flip() +
+#   theme_bw(base_size = 14) +
+#   ylab(NULL) +
+#   xlab(NULL) +
+#   ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in ChEA Database")
+# plt
+# ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_chea.png")))
+# 
+# eres <- enrichr(genesNow, databases = "ARCHS4_TFs_Coexp")
+# eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel)
+# terms <- eres[[1]] %>%
+#   as_tibble() %>%
+#   slice_min(P.value, n = num_sel) %>%
+#   filter(row_number() <= num_sel) %>%
+#   pull(Term)
+# terms <- unique(unlist(terms))
+# terms
+# plttbl <- eres[[1]] %>%
+#   as_tibble() %>%
+#   filter(Term %in% terms, P.value < 0.01) %>%
+#   select(Term, combined_score = Combined.Score, padj = Adjusted.P.value)
+# plt <- plttbl %>%
+#   arrange(combined_score) %>%
+#   mutate(
+#     Term = factor(Term,
+#                   levels = unique(Term)
+#     )
+#   ) %>%
+#   filter(!is.na(Term)) %>%
+#   ggplot(aes(x = Term, y = combined_score)) +
+#   geom_col(fill="#F58776") +
+#   coord_flip() +
+#   theme_bw(base_size = 14) +
+#   ylab(NULL) +
+#   xlab(NULL) +
+#   ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in ARCHS4 TF Database")
+# plt
+# ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_archs4.png")))
+# 
+# 
+# #### Analyze bivalent enhancer clusters
+# 
+# ct <- "HEK293"
+# chain <- "data/hg38_to_hg19.chain.gz"
+# chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
+# if (! file.exists("tmp/GSM2711410_hek293.h3k4me1.bw")) {
+#   # Download the annotations for HEK293 cells
+#   download.file("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2902nnn/GSM2902624/suppl/GSM2902624_HEK293_ATAC_high_depth_bio1_tech1.bw", destfile = "tmp/GSM2902624_HEK293_ATAC_high_depth_bio1_tech1.bw")
+#   download.file("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4586nnn/GSM4586041/suppl/GSM4586041_HEK293_H3K27me3.bw", destfile = "tmp/GSM4586041_HEK293_H3K27me3.bw")
+#   download.file("https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM2711nnn/GSM2711410/suppl/GSM2711410_hek293.h3k4me1.bw", destfile = "tmp/GSM2711410_hek293.h3k4me1.bw")
+# }
+# 
+# # Calculate clusters for all enhancers
+# chromenh <- pkschrom[[ct]] 
+# chromenhhg19 <- rtracklayer::liftOver(chromenh, chain = chn) %>% unlist()
+# chromenhhg19 <- unique(chromenhhg19)
+# bigchromenh <- (chromenhhg19 + 5) %>% GenomicRanges::reduce(with.revmap=T)
+# len <- sapply(bigchromenh$revmap, length)
+# bigchromenh %>% #[sample(length(bigchromenh), 10000),] %>% 
+#   rtracklayer::export(
+#     con = "tmp/enh_clusters__hek293.bed"
+#   )
+# 
+# # Calculate clusters for bivalent enhancers
+# chromenh <- pkschrom[[ct]] 
+# chromenhbiv <- chromenh[chromenh$name == "EnhBiv", ]
+# chromenhbivhg19 <- rtracklayer::liftOver(chromenhbiv, chain = chn) %>% unlist()
+# chromenhbivhg19 <- unique(chromenhbivhg19)
+# rtracklayer::export(chromenhbivhg19, con = "tmp/enh_biv__hek293.bed")
+# 
+# # Get track for hg19 chromHMM
+# hg19_chromhmm <- "https://www.encodeproject.org/files/ENCFF402EKL/@@download/ENCFF402EKL.bed.gz"
+# infile <- paste0("tmp/", ct, "_chromhmm_enhbiv.bed")
+# infile2 <- paste0("tmp/", ct, "_chromhmm_enhbiv.sort.bed")
+# outfile <- paste0("tmp/", ct, "_chromhmm_enhbiv.sort.bb")
+# hg19_chromhmm <- valr::read_bed12(hg19_chromhmm)
+# hg19_chromhmm %>% filter(name == "EnhBiv") %>%
+#   write_tsv(infile, col_names = F)
+# system(paste0("tail -n +2 ", infile, " | sort -k1,1 -k2,2n > ", infile2))
+# system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedToBigBed ", infile2, " tmp/chrom.sizes ", outfile))
+# aws.s3::put_object(file = outfile, object = paste0("misc/", ct, "_hg19_enhbig.bb"), bucket = RLSeq:::RLBASE_S3, multipart = TRUE, show_progress = TRUE)
+# 
+# bigbivchromenh <- (chromenhbivhg19 + 5) %>% GenomicRanges::reduce(with.revmap=T)
+# len <- sapply(bigbivchromenh$revmap, length)
+# bigbivchromenh %>% 
+#   rtracklayer::export(
+#     con = "tmp/enh_biv_clusters__hek293.bed"
+#   )
+# 
+# # Run computeMatrix
+# system(
+#   paste0(
+#     '~/miniconda3/condabin/conda run -n rlbaseData computeMatrix scale-regions ',
+#     '-S analyses/extension_of_dRNH_S96_analysis/', ct, '_GROSeq_comb.bw ',
+#     'analyses/extension_of_dRNH_S96_analysis/', ct, '_MapR_comb.bw ',
+#     'tmp/GSM2902624_HEK293_ATAC_high_depth_bio1_tech1.bw ',
+#     'tmp/GSM4586041_HEK293_H3K27me3.bw tmp/GSM2711410_hek293.h3k4me1.bw ',
+#     'tmp/rlregions_dRNH.hg19.bw.bw tmp/rlregions_S96.hg19.bw.bw -R ',
+#     'tmp/enh_biv_clusters__hek293.bed tmp/enh_clusters__hek293.bed -m 1500 -a 15000 -b 15000 -bs 500 -o ',
+#     'tmp/enh_clusters__hek293.mat.gz -p 44 --skipZeros'
+#   )
+# )
+# 
+# n <- 7
+# 
+# mat <- read_tsv("tmp/enh_clusters__hek293.mat.gz", skip = 1, col_names = FALSE)
+# meta <- read_lines("tmp/enh_clusters__hek293.mat.gz")[1]
+# meta <- gsub(meta, pattern = "@", replacement = "")
+# meta <- jsonlite::parse_json(meta)
+# 
+# ea <- 30 + 30 + 3  # 90 if 500bs; 150 if 300bs
+# colnames(mat)[1:6] <- c("chrom", "start", "end", "name", "score", "strand")
+# colnames(mat)[7:(6+(n*ea))] <- paste0(
+#   rep(
+#     c(
+#       "GRO", 
+#       "MapR",
+#       "ATAC",
+#       "H3K27me3",
+#       "H3K4me1",
+#       "dRNH",
+#       "S96"
+#     ), each=ea
+#   ),
+#   "__",
+#   rep(1:(ea/3), n*3),
+#   "__",
+#   rep(1:ea, n),
+#   "__",
+#   rep(rep(c("a", "m", "b"), each=(ea/3)), n)
+# )
+# 
+# mlong <- mat %>% pivot_longer(cols = contains("__"), names_to = "NAMES")
+# lpat <- "(.+)__(.+)__(.+)__(.+)"
+# mlong <- mlong %>% 
+#   mutate(
+#     ip=gsub(NAMES, pattern = lpat, replacement = "\\1"),
+#     pos = gsub(NAMES, pattern = lpat, replacement = "\\2"),
+#     posful =  gsub(NAMES, pattern = lpat, replacement = "\\3"),
+#     posgroup = gsub(NAMES, pattern = lpat, replacement = "\\4"),
+#     value = as.numeric(case_when(value == "NaN" ~ 0, TRUE ~ value))
+#   )
+# 
+# sums <- mlong %>%
+#   group_by(ip) %>% 
+#   summarise(val=sum(value))
+# 
+# # Add H3K27ac, RNAPolII, BRD4, and CTCF and Richard Young Insulated Boundaries
+# 
+# mlong2 <- inner_join(mlong, sums)
+# mlong3 <- mlong2 %>%
+#   mutate(value_scale = round(1000000*(value / val), digits = 6))
+# pltdat <- mlong3 %>% 
+#   group_by(ip, posful) %>% 
+#   summarise(value_scale2 = mean(value_scale))
+# pltdat %>% 
+#   ggplot(aes(x = posful, y = value_scale2, color=ip, group=ip)) +
+#   geom_line()
+# 
+# mwide <- mlong3 %>% 
+#   select(-value, -ip, -pos, -posful, -posgroup, -val) %>% 
+#   pivot_wider(names_from = NAMES, values_from = value_scale)
+# torm <- mwide[,7:(6+(n*ea))] %>% rowSums()
+# mwide2 <- mwide[which(torm != 0),]
+# 
+# write_tsv(mwide, file = "tmp/enh_clusters2__HEK293.mat", col_names = FALSE)
+# system("zcat tmp/enh_clusters__hek293.mat.gz | head -n 1 > tmp/enh_clusters3__HEK293.mat && cat tmp/enh_clusters2__HEK293.mat >> tmp/enh_clusters3__HEK293.mat && gzip -f tmp/enh_clusters3__HEK293.mat")
+# system(
+#   paste0(
+#     '~/miniconda3/condabin/conda run -n rlbaseData plotHeatmap --matrixFile ',
+#     'tmp/enh_clusters3.mat.gz --outFileName tmp/enh_clusters.png ',
+#     '-z "Bivalent enhancers" "All Enhancers" --samplesLabel "iPSC GRO-Seq" ',
+#     '"iPSC MapR" "iPSC ATAC-Seq" "dRNH consensus" "S9.6 consensus" ',
+#     '--startLabel	"start" --endLabel "end" --heatmapWidth 6 --colorMap "plasma"'
+#   )
+# )
+# 
+# 
+# 
+# 
+# system(
+#   paste0(
+#     '~/miniconda3/condabin/conda run -n rlbaseData computeMatrix scale-regions ',
+#     '-S analyses/extension_of_dRNH_S96_analysis/', ct, '_GROSeq_comb.bw ',
+#     'analyses/extension_of_dRNH_S96_analysis/', ct, '_MapR_comb.bw ',
+#     'tmp/GSM2902624_HEK293_ATAC_high_depth_bio1_tech1.bw ',
+#     'tmp/GSM4586041_HEK293_H3K27me3.bw tmp/GSM2711410_hek293.h3k4me1.bw ',
+#     'tmp/rlregions_dRNH.hg19.bw.bw tmp/rlregions_S96.hg19.bw.bw -R ',
+#     'tmp/enh_biv_clusters__hek293.bed -m 15000 -a 15000 -b 15000 -bs 300 -o ',
+#     'tmp/bivenh_clusters__hek293.mat.gz -p 44'
+#   )
+# )
+# 
+# 
+# system(
+#   paste0(
+#     '~/miniconda3/condabin/conda run -n rlbaseData plotHeatmap --matrixFile ',
+#     'tmp/bivenh_clusters__hek293.mat.gz --outFileName tmp/enh_clusters_hek293.png ',
+#     '-z "Bivalent enhancers" "All Enhancers" --samplesLabel "iPSC GRO-Seq" ',
+#     '"iPSC MapR" "iPSC ATAC-Seq" "dRNH consensus" "S9.6 consensus" ',
+#     '--startLabel	"start" --endLabel "end" --heatmapWidth 6 --colorMap "plasma"'
+#   )
+# )
+# 
+# 
+# 
 
 
