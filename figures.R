@@ -2470,7 +2470,7 @@ plt <- plttbl %>%
   ggplot(aes(x = Term, y = combined_score)) +
   geom_col(fill="#F58776") +
   coord_flip() +
-  theme_bw(base_size = 14) +
+  theme_bw(base_size = 16) +
   xlab(NULL) +
   ylab("Enrichment (Combined Score)") +
   ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in ChEA Database")
@@ -2513,12 +2513,12 @@ plt <- plttbl %>%
   ggplot(aes(x = Term, y = combined_score)) +
   geom_col(fill="#F58776") +
   coord_flip() +
-  theme_bw(base_size = 14) +
+  theme_bw(base_size = 16) +
   xlab(NULL) +
   ylab("Enrichment (Combined Score)") +
-  ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in ChEA Database")
+  ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
-ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_chea.png")))
+ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_CellMarker.png")))
 
 eres <- enrichr(genesNow, databases = "ARCHS4_TFs_Coexp")
 num_sel <- 12
@@ -2798,6 +2798,15 @@ dd3 <- bind_rows(reslst5, .id = "group") %>%
   mutate(anno = gsub(anno, pattern = ".+__", replacement = ""))
 
 ### Comparison plot
+rbind(mutate(dd3, group = "Genic"), mutate(dd2, group = "Intergenic")) %>% 
+  pivot_longer(cols = contains("-")) %>% 
+  mutate(name2 = str_c(name, group, sep = " - ")) %>% 
+  group_by(group, name, ip) %>% 
+  filter(! is.na(value)) %>% 
+  summarise(mn=mean(value)) %>% 
+  filter(ip == "eCLiP") %>% 
+  pivot_wider(id_cols = name, names_from = group, values_from = mn) %>% 
+  mutate(dif = Genic / Intergenic)
 plt <- rbind(mutate(dd3, group = "Genic"), mutate(dd2, group = "Intergenic")) %>% 
   pivot_longer(cols = contains("-")) %>% 
   mutate(name2 = str_c(name, group, sep = " - ")) %>% 
@@ -2808,7 +2817,8 @@ plt <- rbind(mutate(dd3, group = "Genic"), mutate(dd2, group = "Intergenic")) %>
   facet_wrap(~ip) +
   ggpubr::stat_compare_means(
     comparisons = list(
-      c("S9.6-only - Genic", "S9.6-only - Intergenic")
+      c("S9.6-only - Genic", "S9.6-only - Intergenic"),
+      c("dRNH-only - Genic", "dRNH-only - Intergenic")
     )
   ) +
   theme_bw(14) +
@@ -2816,7 +2826,7 @@ plt <- rbind(mutate(dd3, group = "Genic"), mutate(dd2, group = "Intergenic")) %>
   xlab(NULL) +
   ggpubr::rotate_x_text(30) +
   ylab("Enrichment (log2 odds ratio)") +
-  ggtitle("Enrichment of consensus peaks within ChIP sites")
+  ggtitle("Enrichment of consensus peaks within ChIP/eCLiP sites")
 plt
 ggsave(plt, filename = file.path(resloc, "eCLiP_vs_ChIP_binding.png"))
 
