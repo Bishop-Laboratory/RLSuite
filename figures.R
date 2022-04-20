@@ -623,11 +623,11 @@ divs <- setNames(c(
   ns96
 ), nm = c("rlregions_dRNH", "rlregions_S96"))
 pltdats <- tibble("score" = cm,
-              "loc" = rep(seq(1100), 2),
-              "div" = c(rep(divs[metadat$sample_labels[1]], metadat$sample_boundaries[2]),
-                        rep(divs[metadat$sample_labels[2]], metadat$sample_boundaries[2])),
-              "label" = c(rep(metadat$sample_labels[1], metadat$sample_boundaries[2]),
-                          rep(metadat$sample_labels[2], metadat$sample_boundaries[2]))) %>%
+                  "loc" = rep(seq(1100), 2),
+                  "div" = c(rep(divs[metadat$sample_labels[1]], metadat$sample_boundaries[2]),
+                            rep(divs[metadat$sample_labels[2]], metadat$sample_boundaries[2])),
+                  "label" = c(rep(metadat$sample_labels[1], metadat$sample_boundaries[2]),
+                              rep(metadat$sample_labels[2], metadat$sample_boundaries[2]))) %>%
   mutate(
     score = score / div,
     score = score / sum(score),
@@ -680,7 +680,7 @@ consInt <- lapply(cons, function(x) {
   # Call summits
   x <- x %>%
     dplyr::rename(so = start, 
-           eo = end) %>%
+                  eo = end) %>%
     mutate(
       start = so + peak - 250,
       end = so + peak + 250
@@ -779,6 +779,7 @@ plt <- oltxres %>%
   ylab("Peak location (%)") +
   xlab(NULL) +
   scale_fill_manual(values = txfeat_cols, guide = guide_legend(title = "Feature", reverse = TRUE))
+plt
 ggsave(plt, filename = "results/Figure_4/consensus__txplot.svg")
 
 # With shared
@@ -821,26 +822,28 @@ plt <- oltxres2 %>%
     type = factor(type, levels = rev(c(
       "TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS", "Intergenic"
     )))
-   )  %>%
+  )  %>%
   ggplot(aes(x = source, y = n, fill = type)) +
-  geom_bar(stat = "identity", position = "stack") +
-  theme_bw(base_size = 14) +
+  geom_bar(stat = "identity", color="black", position = "stack") +
+  theme_bw(base_size = 20) +
   coord_flip() +
   ylab("Peak location (%)") +
   xlab(NULL) +
+  ggtitle("Consensus site overlap in genes") +
   scale_fill_manual(values = txfeat_cols, guide = guide_legend(title = "Feature", reverse = TRUE))
-ggsave(plt, filename = "results/Figure_4/consensus__txplot_2.svg")
+plt
+ggsave(plt, filename = "results/Figure_4/consensus__txplot_2.svg", height = 6, width = 8)
 
 ## Venn showing olap of S96, dRNH, and RLFS
-ol <- ChIPpeakAnno::findOverlapsOfPeaks(
-  GenomicRanges::makeGRangesFromDataFrame(cons$dRNH),
-  GenomicRanges::makeGRangesFromDataFrame(cons$S9.6),
-  RLSeq:::getRLFSAnno(object = rlr)
-)
-pdf("results/Figure_4/RLFS_venn.pdf", height = 4, width = 7)
-ChIPpeakAnno::makeVennDiagram(ol, fill = c("#e2a3e3", "#82d0e8", "white"), 
-                              NameOfPeaks = c("dRNH", "S9.6", "RLFS"))
-dev.off()
+# ol <- ChIPpeakAnno::findOverlapsOfPeaks(
+#   GenomicRanges::makeGRangesFromDataFrame(cons$dRNH),
+#   GenomicRanges::makeGRangesFromDataFrame(cons$S9.6),
+#   RLSeq:::getRLFSAnno(object = rlr)
+# )
+# pdf("results/Figure_4/RLFS_venn.pdf", height = 4, width = 7)
+# ChIPpeakAnno::makeVennDiagram(ol, fill = c("#e2a3e3", "#82d0e8", "white"), 
+#                               NameOfPeaks = c("dRNH", "S9.6", "RLFS"))
+# dev.off()
 
 ## Venn showing olap of dRNH and S96
 ol <- ChIPpeakAnno::findOverlapsOfPeaks(
@@ -930,7 +933,7 @@ ol <- restbl %>%
                         ifelse(log2FoldChange < 0, "Under-abundant (S9.6 vs dRNH)", "Nothing"))) %>%
   filter(padj < .05) %>%
   group_by(group) %>%
-  slice_min(order_by = padj, n = 2000) %>%
+  slice_min(order_by = padj, n = 1000) %>%
   mutate(genes = strsplit(allGenes, ",")) %>%
   unnest(genes) %>%
   filter(! is.na(genes)) %>%
@@ -961,7 +964,7 @@ pltdata <- rescomb %>%
               values_from = value) %>%
   group_by(ip_type) 
 terms <- pltdata %>%
-  slice_max(order_by = combined_score, n = 8) %>%
+  slice_max(order_by = combined_score, n = 6) %>%
   pull(Term)
 
 dd <- pltdata %>%
@@ -984,6 +987,7 @@ barplt <- dd %>%
   ylab("Combined Score") +
   xlab(NULL) +
   scale_fill_manual(values = ip_cols)
+barplt
 ggsave(barplt, filename = "results/Figure_5/barplt.svg", height = 8, width = 8)
 
 # Feature plots
@@ -1146,21 +1150,27 @@ plt <- pltdat %>%
     group2 = gsub(group, pattern = "\\-.+", replacement = ""),
     group3 = gsub(group, pattern = ".+\\-", replacement = ""),
     group3 = ifelse(group3 == "only", "Unshared", "Shared"),
-    group3 = factor(group3, levels = (unique(group3)))
+    group3 = factor(group3, levels = (unique(group3))),
+    group2 = factor(group2, levels = rev(unique(group2)))
   ) %>%
   group_by(group2) %>%
   mutate(prop = n / sum(n)) %>%
   ggplot(aes(x = group2, y = prop, fill = group3)) +
-  geom_col() +
+  geom_col(color="black") +
   coord_flip() +
-  theme_bw(base_size = 16) +
+  theme_bw(base_size = 20) +
   theme(legend.title = element_blank()) +
   ylab("Proportion of consensus peaks") +
   xlab(NULL) +
-  scale_fill_brewer(type = "qual", palette = "Dark2") +
-  ggtitle("RLRegions shared vs unshared")
+  scale_fill_manual(
+    values = c(
+      "Unshared" = "#c4c4c4",
+      "Shared" = "#d88a19"
+    )
+  ) +
+  ggtitle("Consensus sites shared vs unshared")
 plt
-ggsave(plt, filename = file.path("results/Figure_4/", "prop_consensus_shared_barchart.png"))
+ggsave(plt, filename = file.path("results/Figure_4/", "prop_consensus_shared_barchart.png"), height = 6, width = 8)
 
 ### Analysis of Tx Features
 ## What are the features overlapping consensus peaks in each group?
@@ -1609,7 +1619,7 @@ plt <- enhstats %>%
   guides(fill=guide_legend(title = NULL)) +
   ggtitle("Consensus peak proportion at distal enhancers") +
   theme_bw(base_size = 16)
-  
+
 plt
 ggsave(plt, filename = file.path(resloc, "consensus_pks_denh.png"))
 
@@ -2119,7 +2129,7 @@ gro <- valr::bed_merge(
     gro3,
     gro4
   )
-), score = sum(score))
+  ), score = sum(score))
 
 int <- valr::bed_intersect(gro, dEnh2_min)
 intGRO <- int %>%
@@ -2839,7 +2849,7 @@ totalrnh <- length(unique(rlsamples$rlsample[rlsamples$ip_type == "dRNH" & rlsam
 totalS96 <- length(unique(rlsamples$rlsample[rlsamples$ip_type == "S9.6" & rlsamples$label == "POS" & rlsamples$genome == "hg38" & rlsamples$numPeaks != 0]))
 # Apply scaling factor
 rlregions_cons <- rlregions %>%
-  rename(
+  dplyr::rename(
     pct_cons = conservation_pct
   ) %>%
   arrange(desc(pct_cons)) %>%
@@ -3089,6 +3099,209 @@ restbl %>%
   mutate(rlregion = gsub(rlregion, pattern = "All_", replacement = "")) %>%
   select(rlregion, baseMean, log2FoldChange, lfcSE, stat, pvalue, padj) %>%
   write_csv("results/Table_S3/differentially_abundant_rlregions.csv")
+
+
+
+
+
+### Pausing index
+
+
+
+proHela <- list(
+  "repA" = "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5420nnn/GSM5420820/suppl/GSM5420820_Async_repA_PROseq.bed.gz",
+  "repB" = "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5420nnn/GSM5420821/suppl/GSM5420821_Async_repB_PROseq.bed.gz"
+)
+lapply(
+  proHela, function(x) {
+    df <- gsub(x, pattern = ".+/suppl/", replacement = "")
+    if (! file.exists(df)) download.file(x, destfile = df)
+    y <- valr::read_bed12(x)
+    
+    # download.file("https://hgdownload.cse.ucsc.edu/goldenpath/hg38/bigZips/hg38.chrom.sizes", destfile = "tmp/hg38.chrom.sizes")
+    
+    ## POS
+    infile <- gsub(df, pattern = "\\.bed\\.gz", replacement = ".pos.bed") %>% file.path("tmp", .)
+    infile2 <- gsub(df, pattern = "\\.bed\\.gz", replacement = ".pos.sort.bed") %>% file.path("tmp", .)
+    outfile <-  gsub(df, pattern = "\\.bed\\.gz", replacement = ".pos.bdg") %>% file.path("tmp", .)
+    outfile2 <-  gsub(df, pattern = "\\.bed\\.gz", replacement = ".pos.bw") %>% file.path("tmp", .)
+    chroms <- valr::read_genome("tmp/hg38.chrom.sizes")
+    
+    y %>% 
+      filter(strand == "+", chrom %in% chroms$chrom) %>%
+      write_tsv(file = infile, col_names = FALSE)
+    
+    system(paste0("tail -n +2 ", infile, " | sort -k1,1 > ", infile2))
+    system(paste0("~/miniconda3/condabin/conda run -n rlbaseData genomeCoverageBed -bg -i ", infile2, " -g tmp/hg38.chrom.sizes > ", outfile))
+    system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedGraphToBigWig ", outfile, " tmp/hg38.chrom.sizes ", outfile2))
+    
+    ## NEG
+    infile <- gsub(df, pattern = "\\.bed\\.gz", replacement = ".neg.bed") %>% file.path("tmp", .)
+    infile2 <- gsub(df, pattern = "\\.bed\\.gz", replacement = ".neg.sort.bed") %>% file.path("tmp", .)
+    outfile <-  gsub(df, pattern = "\\.bed\\.gz", replacement = ".neg.bdg") %>% file.path("tmp", .)
+    outfile2 <-  gsub(df, pattern = "\\.bed\\.gz", replacement = ".neg.bw") %>% file.path("tmp", .)
+    
+    y %>% 
+      filter(strand == "-", chrom %in% chroms$chrom) %>%
+      write_tsv(file = infile, col_names = FALSE)
+    
+    system(paste0("tail -n +2 ", infile, " | sort -k1,1 > ", infile2))
+    system(paste0("~/miniconda3/condabin/conda run -n rlbaseData genomeCoverageBed -bg -i ", infile2, " -g tmp/hg38.chrom.sizes > ", outfile))
+    system(paste0("~/miniconda3/condabin/conda run -n rlbaseData bedGraphToBigWig ", outfile, " tmp/hg38.chrom.sizes ", outfile2))
+    
+  }
+)
+
+
+### Get HCT116
+download.file("https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz", destfile = "tmp/hg19_hg38.chain.gz")
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE156nnn/GSE156737/suppl/GSE156737_WT_DMSO.ps.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE156nnn/GSE156737/suppl/GSE156737_WT_DMSO.ns.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+
+
+### Get MCF-7
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5557nnn/GSM5557748/suppl/GSM5557748_Si_Ctrl_PRO_Seq_for_METTL3_KD_Rep1_neg_test_noNorm.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5557nnn/GSM5557748/suppl/GSM5557748_Si_Ctrl_PRO_Seq_for_METTL3_KD_Rep1_pos_test_noNorm.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+
+
+# A549
+x <- "https://www.encodeproject.org/files/ENCFF275NOU/@@download/ENCFF275NOU.bigWig"
+df <-  gsub(x, pattern = ".+download/(ENC.+)$", replacement = "tmp/\\1")
+if (! file.exists(df)) download.file(x, destfile = df)
+x <- "https://www.encodeproject.org/files/ENCFF979GYA/@@download/ENCFF979GYA.bigWig"
+df <-  gsub(x, pattern = ".+download/(ENC.+)$", replacement = "tmp/\\1")
+if (! file.exists(df)) download.file(x, destfile = df)
+
+
+# HFF
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5623nnn/GSM5623305/suppl/GSM5623305_2018-08-07-HFF-hg38-SIC-FW.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+if (! file.exists(df)) download.file(x, destfile = df)
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5623nnn/GSM5623305/suppl/GSM5623305_2018-08-07-HFF-hg38-SIC-RV.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+if (! file.exists(df)) download.file(x, destfile = df)
+
+
+# KELLY
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE179nnn/GSE179916/suppl/GSE179916_PROseq_WT_F.bigWig"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+if (! file.exists(df)) download.file(x, destfile = df)
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE179nnn/GSE179916/suppl/GSE179916_PROseq_WT_R.bigWig"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+if (! file.exists(df)) download.file(x, destfile = df)
+
+
+# DLD1
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5766nnn/GSM5766812/suppl/GSM5766812_TT-seq_DMSO-3h_PAF1-fkbp-DLD1_Batch10_fwd.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+x <- "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5557nnn/GSM5557748/suppl/GSM5557748_Si_Ctrl_PRO_Seq_for_METTL3_KD_Rep1_pos_test_noNorm.bw"
+df <- gsub(x, pattern = ".+/suppl/", replacement = "") %>% file.path("tmp", .)
+df2 <- gsub(df, pattern = "\\.bw", replacement = ".hg38")
+if (! file.exists(df)) download.file(x, destfile = df)
+system(paste0("~/miniconda3/condabin/conda run -n crossmap CrossMap.py bigwig tmp/hg19_hg38.chain.gz ", df, " ", df2))
+
+
+## Get pause index ##
+
+library(tidyverse)
+library(BRGenomics)
+library(rtracklayer)
+library(magrittr)
+load("tmp/for_pause.rda")
+
+txs <- GenomicFeatures::transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene)
+gb <- genebodies(txs, 300, -300, min.window = 400)
+txs <- subset(txs, tx_name %in% gb$tx_name)
+pr <- promoters(txs, 0, 100)
+gts <- EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86 %>%
+  AnnotationDbi::select(
+    ., keys = AnnotationDbi::keys(.), columns = c("TXNAME", "SYMBOL")
+  )
+
+files <- tribble(
+  ~cell, ~strand, ~destfile,
+  "A549", "+", "tmp/ENCFF979GYA.bigWig",
+  "A549", "-", "tmp/ENCFF275NOU.bigWig",
+  "HCT116", "+", "tmp/GSE156737_WT_DMSO.ps.hg38.bw.bw",
+  "HCT116", "-", "tmp/GSE156737_WT_DMSO.ns.hg38.bw",
+  "HeLa", "+", "tmp/GSM5420820_Async_repA_PROseq.pos.bw",
+  "HeLa", "-", "tmp/GSM5420820_Async_repA_PROseq.neg.bw",
+  "MCF7", "+", "tmp/GSM5557748_Si_Ctrl_PRO_Seq_for_METTL3_KD_Rep1_pos_test_noNorm.hg38.bw",
+  "MCF7", "-", "tmp/GSM5557748_Si_Ctrl_PRO_Seq_for_METTL3_KD_Rep1_neg_test_noNorm.hg38.bw",
+  "HFF", "+", "tmp/GSM5623305_2018-08-07-HFF-hg38-SIC-FW.bw",
+  "HFF", "-", "tmp/GSM5623305_2018-08-07-HFF-hg38-SIC-RV.bw",
+  "KELLY", "+", "tmp/GSE179916_PROseq_WT_F.bigWig",
+  "KELLY", "-", "tmp/GSE179916_PROseq_WT_R.bigWig"
+) 
+pos <- import.bw(files$destfile[9])
+strand(pos) <- "+"
+neg <- import.bw(files$destfile[10])
+neg$score <- -1 * neg$score
+strand(neg) <- "-"
+seqs <- c(pos, neg)
+pidx <- getPausingIndices(seqs, pr, gb)
+
+pidxtbl <- tibble(
+  "TXNAME" = gb$tx_name, 
+  "pauseIndex" = pidx
+) %>%
+  filter(! is.na(pauseIndex), is.finite(pauseIndex), pauseIndex > 0) %>%
+  mutate(TXNAME = gsub(TXNAME, pattern = "\\..+", replacement = "")) %>%
+  inner_join(gts, by = "TXNAME") 
+tssrl <- unique(oltxsum$rlregion[oltxsum$type == "TSS"])
+restbltss <- restbl %>%
+  filter(rlregion %in% tssrl) %>%
+  mutate(cond = case_when(
+    log2FoldChange > 0 & padj < .05 ~ "S9.6-specific genes",
+    log2FoldChange < 0 & padj < .05 ~ "dRNH-specific genes",
+    TRUE ~ "None"
+  )) %>%
+  filter(cond != "None") %>%
+  dplyr::select(cond, SYMBOL=allGenes) %>%
+  mutate(SYMBOL = strsplit(SYMBOL, ",")) %>%
+  unnest(cols = "SYMBOL")
+respid <- inner_join(restbltss, pidxtbl, by = "SYMBOL")
+
+# save(oltxsum, restbl, file = "tmp/for_pause.rda")
+ip_cols <- RLSeq:::auxdata$ip_cols
+respid %T>%
+  {
+    group_by(., cond) %>% summarise(median(pauseIndex)) %>% print()
+  } %>%
+  ggplot(aes(x = cond, y = pauseIndex, fill = cond)) +
+  geom_violin(alpha = .5) +
+  geom_boxplot(width = .5) +
+  scale_y_log10() +
+  ylab("Pause index (log scale)") +
+  xlab(NULL) +
+  ggpubr::stat_compare_means(comparisons = list(c("dRNH-specific genes", "S9.6-specific genes")), 
+                             label = "p.signif", size = 6) +
+  # scale_fill_manual(values = setNames(ip_cols, nm = paste0(names(ip_cols), "-specific"))) +
+  theme_bw(base_size = 14) +
+  ggpubr::rremove("legend") 
+
+
+
+
 
 
 ###### Percent of genome covered by consensus regions
