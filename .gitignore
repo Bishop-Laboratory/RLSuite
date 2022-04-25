@@ -16,6 +16,7 @@ venv/
 *.bed
 .idea
 R-package/run_vars.json
+*.html
 renv/
 RSeq_out*
 *.fastq
