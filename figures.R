@@ -3542,7 +3542,7 @@ lapply(cons2, function(x) {
   geom_col(color="black") +
   coord_flip() +
   xlab(NULL) +
-  ylab("R-loop region occupancy (Mb)") +
+  ylab("R-loop region genomic coverage (Mb)") +
   theme_bw(base_size = 20, base_line_size = .5) +
   scale_fill_manual(
     values = c(
@@ -3554,9 +3554,10 @@ lapply(cons2, function(x) {
     )
   ) +
   guides(fill=guide_legend(title = NULL)) -> plt
+plt
 ggsave(
   plt, filename = "results/Figure_4/prop_RLRegion_occupied.png",
-  width=851, height=511, units = "px"
+  width=851, height=511, units = "px", dpi = 96
 )
 
 

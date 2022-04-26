@@ -5,7 +5,7 @@ library(tidyverse)
 library(readxl)
 library(SRAdb)
 
-samps_us <- rlbase_samples()
+samps_us <- RLHub::rlbase_samples()
 
 samps_them_orig <- read_excel("analyses/misc/Supplementary Tables revised.xlsx")
 
@@ -36,6 +36,7 @@ final <- samps_us %>%
   arrange(match(Experiment, samps_them_orig$Experiment)) 
 
 final %>%
+  filter(label == "POS") %>% 
   group_by(label, prediction) %>%
   tally() %>%
   mutate(pct = 100*(n / sum(n)))
