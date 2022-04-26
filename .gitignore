@@ -10,6 +10,7 @@ venv/
 *mats/
 *.fasta
 *.tgz
+*.html
 .Rproj.user
 *databases/
 *.gz
