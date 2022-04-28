@@ -205,7 +205,104 @@ plt <- pltdat %>%
   ggpubr::rremove("legend") +
   theme(axis.text.x = element_text(angle = 36, vjust = 1,
                                    hjust = 1)) 
+
+
+
 ggsave(plt, filename = "results/Figure_1/peaks_called_by_mode.pdf", height = 3.5, width = 12)
+
+
+## Figure showing sizes by modality
+fls <- list.files(
+  "../RLBase-data/rlbase-data/rlpipes-out/peaks/", 
+  pattern = ".broadPeak$", full.names = TRUE
+)
+pkwd <- parallel::mclapply(
+  seq(nrow(pltdat)), function(i) {
+    message(i)
+    samp <- pltdat$rlsample[i]
+    pk <- fls[grep(fls, pattern = samp)]
+    if (length(pk) == 0) return(NULL)
+    e <- try(
+      {
+        valr::read_broadpeak(pk[1]) %>% 
+          mutate(width = end - start) %>% 
+          summarise(
+            medwidth = median(width),
+            meanwidth = mean(width),
+            medqval = median(qvalue),
+            meanqval = mean(qvalue),
+            corwidqval_p = cor.test(width, qvalue, method = "spearman")$p.value,
+            corwidqval_r = cor.test(width, qvalue, method = "spearman")$estimate
+          ) %>% 
+          mutate(rlsample = samp)
+      }
+    )
+    if (class(e)[1] != "try-error") return(e) else return(NULL)
+  }, mc.cores = 44
+) %>% bind_rows()
+
+samp <- pkwd %>%filter(corwidqval_p == 0) %>% 
+  slice_max(corwidqval_r) 
+plt1 <- valr::read_broadpeak(fls[grep(fls, pattern = samp$rlsample)]) %>% 
+  mutate(width = end - start) %>%
+  ggplot(aes(x = width, y = qvalue)) + 
+  geom_point() + 
+  scale_y_log10() + 
+  scale_x_log10() +
+  theme_gray(base_size = 10) +
+  xlab("Peak width (log10)") +
+  ylab("Peak Q-Value (log10)") +
+  ggtitle(
+    paste0("Peak width vs strength (", samp$rlsample, ")"),
+    subtitle = paste0("Rho: ", round(samp$corwidqval_r, 4), " -- padj: ", samp$corwidqval_p)
+  )
+plt2 <- pkwd %>% 
+  mutate(
+    padj = p.adjust(corwidqval_p),
+    sig = padj < 0.05
+  ) %>% 
+  group_by(sig) %>% 
+  tally() %>% 
+  mutate(pct = 100*(n/sum(n))) %>% 
+  ggplot(aes(x=1, y = pct, fill=sig)) +
+  geom_bar(stat = "identity", width=.4, position = "stack") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Percentage of samples") +
+  theme_gray(base_size = 10) +
+  scale_fill_manual(
+    values = c("TRUE" = "firebrick", "FALSE" = "grey")
+  ) +
+  guides(fill = guide_legend(title = "Significant\ncorrelation")) +
+  ggtitle("Pct of samples w/ significant correlation \nbetween width and strength of peaks")
+
+# Make plot
+pltdat2 <- inner_join(pkwd, pltdat, by = "rlsample") %>%
+  group_by(mode) %>%
+  mutate(
+    pkwdmed = median(medwidth, na.rm=TRUE)
+  )
+plt3 <- pltdat2 %>%
+  filter(! is.na(medwidth), medwidth > 0, ! is.na(pkwdmed), label == "POS") %>%
+  arrange(pkwdmed) %>%
+  mutate(mode = factor(mode, levels = unique(.$mode))) %>%
+  ggplot(mapping = aes(x = mode, fill = mode,
+                       y = medwidth)) +
+  geom_boxplot(color = "black", width = .7, outlier.shape=NA) +
+  geom_jitter(size=1, width=.2, alpha=.75) +
+  ylab("Median peak width (base pairs)") +
+  xlab(NULL) +
+  labs(title = "Median peak widths by mode") +
+  scale_fill_manual(values = setNames(RLSeq:::auxdata$mode_cols$col, nm = RLSeq:::auxdata$mode_cols$mode)) +
+  guides(y = "prism_offset_minor") + 
+  theme_prism(base_size = 14) + 
+  ggpubr::rremove("legend") +
+  theme(axis.text.x = element_text(angle = 36, vjust = 1,
+                                   hjust = 1)) 
+
+ggpubr::ggarrange(
+  plt1, plt2, plt3, labels = "AUTO", widths = c(2, 2, 3), nrow = 1
+)
 
 ### Figure 2 / S2 / S3 ###
 dir.create("results/Figure_2/", showWarnings = FALSE)
@@ -2524,49 +2621,6 @@ plt <- plttbl %>%
 plt
 ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_chea.png")))
 
-# CellMarker
-num_sel <- 6
-dENH_gri <- olde3$overlappingPeaks$`dEnh2///gri`
-ghfull %>%
-  filter(
-    name %in% dENH_gri$peaks1[dENH_gri$pName %in% c("EnhBiv")],
-    gene_scores > 10
-  ) -> dd
-unique(dd$genes) -> genesNow
-genesNow
-eres <- enrichr(genesNow, databases = "CellMarker_Augmented_2021")
-eres[[1]] %>%
-  as_tibble() %>%
-  slice_min(P.value, n = num_sel)
-terms <- eres[[1]] %>%
-  as_tibble() %>%
-  slice_min(P.value, n = num_sel) %>%
-  filter(row_number() <= num_sel) %>%
-  pull(Term)
-terms <- unique(unlist(terms))
-terms
-plttbl <- eres[[1]] %>%
-  as_tibble() %>%
-  filter(Term %in% terms) %>%
-  select(Term, combined_score = Combined.Score, padj = Adjusted.P.value)
-plt <- plttbl %>%
-  arrange(combined_score) %>%
-  mutate(
-    Term = factor(Term,
-                  levels = unique(Term)
-    )
-  ) %>%
-  filter(!is.na(Term)) %>%
-  ggplot(aes(x = Term, y = combined_score)) +
-  geom_col(fill="#F58776") +
-  coord_flip() +
-  theme_bw(base_size = 16) +
-  xlab(NULL) +
-  ylab("Enrichment (Combined Score)") +
-  ggtitle("iPSCs dRNH-enhancer (Biv) gene targets", subtitle = "Enrichment in CellMarker Database")
-plt
-ggsave(plt, filename = file.path(resloc, paste0(ct, "_dRNH-dEnh_Biv_CellMarker.png")))
-
 eres <- enrichr(genesNow, databases = "ARCHS4_TFs_Coexp")
 num_sel <- 12
 eres[[1]] %>%
@@ -3140,7 +3194,6 @@ restbl %>%
 
 
 
-
 ### Pausing index
 
 
@@ -3320,7 +3373,7 @@ library(tidyverse)
 library(BRGenomics)
 library(rtracklayer)
 library(magrittr)
-# load("tmp/for_pause.rda")
+load("tmp/for_pause.rda")
 
 txs <- GenomicFeatures::transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene)
 gb <- genebodies(txs, 300, -300, min.window = 400)
@@ -3479,6 +3532,261 @@ pres %>%
   filter(cell == "HEK293", SYMBOL %in% unlist(str_split(topdrnhrl$allGenes, pattern = ","))) %>% 
   arrange(desc(pauseIndex)) %>% 
   slice_max(1)  # ATG3
+
+
+##### R2R: Size depending on localization
+tssrl <- unique(oltxsum$rlregion[oltxsum$type == "TSS"])
+locpat <- "(.+):(.+)-(.+):(.+)"
+rlgr <- rlregions %>%
+  filter(source == "S96") %>% 
+  dplyr::select(rlregion, location) %>%
+  inner_join(oltxsum) %>% 
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3")),
+    width = end - start
+  ) %>% dplyr::select(rlregion, width, type)
+ggplot(rlgr, aes(x = type, y = width, fill = type)) +
+  geom_jitter(width = .15, alpha=.2) +
+  scale_y_log10()
+
+
+
+##### R2R: False negatives
+
+# Wrangle and repair condition names for plotting
+conds <- rlsamples %>% 
+  filter(label == "NEG", prediction == "POS") %>% 
+  mutate(
+    condition = case_when(
+      grepl(condition, pattern = "\\-t[0-9]{1}$") ~ "RNase T",
+      condition == "RNaseA" ~ "RNase A",
+      grepl(other, pattern = "ActD") ~ "Actinomycin D",
+      condition == "Input" & mode == "MapR" ~ "MNase", # This one was mislabeled
+      condition == "pAMNase" & mode == "MapR" ~ "MNase",
+      condition == "RNH" ~ "RNase H1",
+      condition == "RNHdMNase" ~ "NBSS",  # This one was mislabeled
+      TRUE ~ condition
+    )
+  ) %>% 
+  group_by(condition) %>% 
+  mutate(url = file.path(RLSeq:::RLBASE_URL, coverage_s3)) %>%
+  select(rlsample, label, condition, mode, tissue, other, url) 
+
+## Meta RLFS for Input
+toplt <- conds %>%
+  filter(condition == "Input") %>%
+  pull(rlsample) %>% 
+  lapply(function(x) {
+    object <- RLSeq::RLRangesFromRLBase(x)
+    rlfsRes <- rlresult(object, resultName = "rlfsRes")
+    tibble(
+      shift = rlfsRes$`Z-scores`$`regioneR::numOverlaps`$shifts,
+      zs = rlfsRes$`Z-scores`$`regioneR::numOverlaps`$shifted.z.scores,
+      rlsample = x
+    )
+  })
+
+toplt %>%
+  bind_rows() %>% 
+  group_by(rlsample) %>% 
+  mutate(zs = minmax(zs)) %>% 
+  ggplot(aes(x = shift, y = zs, color = rlsample, group=rlsample)) +
+  geom_vline(xintercept = 0, linetype='dashed', color='grey', alpha=.5) +
+  geom_line(size=1.5, alpha = .8) +
+  ylab("Z score (scaled)") +
+  xlab("Distance from RLFS (bp)") +
+  theme_prism(border = TRUE, base_size = 16) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
+  scale_color_brewer(type = "qual", palette = "Set1") +
+  ggtitle("Input control RLFS analysis (DRIP)")
+
+
+## Meta RLFS for MNase
+toplt <- conds %>%
+  filter(condition == "MNase") %>%
+  pull(rlsample) %>% 
+  lapply(function(x) {
+    object <- RLSeq::RLRangesFromRLBase(x)
+    rlfsRes <- rlresult(object, resultName = "rlfsRes")
+    tibble(
+      shift = rlfsRes$`Z-scores`$`regioneR::numOverlaps`$shifts,
+      zs = rlfsRes$`Z-scores`$`regioneR::numOverlaps`$shifted.z.scores,
+      rlsample = x
+    )
+  })
+
+toplt %>%
+  bind_rows() %>% 
+  group_by(rlsample) %>% 
+  mutate(zs = minmax(zs)) %>% 
+  ggplot(aes(x = shift, y = zs, color = rlsample, group=rlsample)) +
+  geom_vline(xintercept = 0, linetype='dashed', color='grey', alpha=.5) +
+  geom_line(size=1.5, alpha = .8) +
+  ylab("Z score (scaled)") +
+  xlab("Distance from RLFS (bp)") +
+  theme_prism(border = TRUE, base_size = 16) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
+  scale_color_brewer(type = "qual", palette = "Dark2") +
+  ggtitle("MNase control RLFS analysis (MapR)")
+
+
+## Put mouseRLFS on genome browser
+infile <- "https://rlbase-data.s3.amazonaws.com/rlfs-beds/mm10.rlfs.bed"
+outfile <- "tmp/mm10.rlfs.bb"
+if (! file.exists(outfile)) {
+  valr::read_bed12(infile) %>% 
+    mutate(score = 1, strand = ".", name = paste0("RLFS_", row_number())) %>% 
+    GenomicRanges::makeGRangesFromDataFrame(
+      keep.extra.columns = T, 
+      seqinfo =  GenomeInfoDb::getChromInfoFromUCSC("mm10", as.Seqinfo = TRUE)
+    ) %>% 
+    rtracklayer::export.bb(con = outfile)
+  aws.s3::put_object(file = outfile, object = paste0("misc/mm10.rlfs.bb"), bucket = RLSeq:::RLBASE_S3, multipart = TRUE, show_progress = TRUE)
+}
+
+conds %>%
+  filter(condition == "MNase") %>% 
+  pull(url)
+
+
+## Donut chart to summarize false neg
+plt <- plot_ly(type = "pie", size = I(.01)) %>%
+  add_pie(
+    data=tally(conds),
+    values = ~n, labels = ~condition, textinfo='label+value',
+    insidetextorientation='horizontal', hole=.6, rotation=186
+  ) %>%
+  layout(showlegend = FALSE, margin = list(l = 100, r = 100, t=100, b=100),
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+plt
+save_image(plt, file = "results/Figure_3/false_neg_cond_donut.svg", width = 300, height = 300, format = "svg")
+  
+  
+
+  
+##### R2R: reproducibility with down sample
+
+## Get differential RL Regions
+restbls <- pbapply::pblapply(seq(10), function(i) {
+  
+  # Make random
+  set.seed(i)
+  
+  # Get the colData
+  cd <- ctsPos@colData %>% 
+    as_tibble() %>%
+    inner_join(
+      select(rlsamples, rlsample, ip_type),
+      by = c("experiment" = "rlsample")
+    ) 
+  
+  # Number of studies to randomly select from S9.6 data
+  num_to_sel <- rlsamples %>% 
+    filter(rlsample %in% cd$experiment & ip_type == "dRNH") %>% 
+    pull(study) %>% unique() %>% length()
+  
+  # Studies to select from
+  studies_selected <- rlsamples %>% 
+    filter(rlsample %in% cd$experiment & ip_type == "S9.6") %>% 
+    pull(study) %>%
+    unique() %>%
+    sample(size = num_to_sel)
+  
+  # Get the S9.6 sample IDs to include (also down sample to hit N=56)
+  sampl <- rlsamples %>% 
+    filter(
+      rlsample %in% cd$experiment,
+      ip_type == "S9.6",
+      study %in% studies_selected
+    ) %>% 
+    slice_sample(n=56) %>% 
+    pull(rlsample)    
+  
+  # Wrangle DDS and run analysis
+  drns <- cd$experiment[cd$ip_type == "dRNH"]
+  ctsPossmall <- ctsPos[,ctsPos$experiment %in% c(sampl, drns)]
+  matsmall <- ctsPossmall@assays@data$cts
+  cdsmall <- cd[cd$experiment %in%  c(sampl, drns),]
+  dds <- DESeq2::DESeqDataSetFromMatrix(
+    countData = matsmall[,cdsmall$experiment], colData = cdsmall, design = ~ip_type
+  )
+  dds <- DESeq2::DESeq(dds)
+  DESeq2::results(dds, contrast = c("ip_type", "S9.6", "dRNH")) %>% 
+    as.data.frame() %>% 
+    rownames_to_column(var = "rlregion") %>%
+    as_tibble() %>%
+    mutate(rlregion = gsub(rlregion, pattern = "All_", replacement = "")) %>% 
+    inner_join(rlregions, by = "rlregion") %>%
+    arrange(padj) %>% 
+    mutate(
+      section = paste0("permutation_", i),
+      n_section = length(sampl)
+    )
+})
+
+
+df <- restbl %>% 
+  mutate(
+    section = "Full",
+    n_section = 191
+  ) %>% 
+  bind_rows(bind_rows(restbls))
+annodf <- df %>% 
+  select(section, n_selected=n_section) %>%
+  distinct() %>% 
+  column_to_rownames("section")
+corr <- df %>% 
+  select(rlregion, stat, section) %>% 
+  pivot_wider(id_cols = rlregion, names_from = section, values_from = stat) %>% 
+  column_to_rownames("rlregion") %>% 
+  cor() 
+
+# Sets the minimum (0), the maximum (15), and the increasing steps (+1) for the color scale
+# Note: if some of your genes are outside of this range, they will appear white on the heatmap
+library(pheatmap)
+library(RColorBrewer)
+
+breaksList = seq(0, 1, by = .001)
+
+# Plots the first heatmap
+pheatmap(
+  corr, 
+  color = colorRampPalette((brewer.pal(n = 7, name = "BrBG")))(length(breaksList)), # Defines the vector of colors for the legend (it has to be of the same lenght of breaksList)
+  breaks = breaksList,
+  cluster_cols = F,
+  cluster_rows = F,
+  angle_col = 45,
+  fontsize = 14,
+  display_numbers = T, number_color = "white", fontsize_number = 18,
+  main = "Correlation of differential analysis between permutations\nPearson correlation of Wald statistic"
+) 
+
+# 4-way plot
+df %>% 
+  select(rlregion, stat, section) %>% 
+  pivot_wider(id_cols = rlregion, names_from = section, values_from = stat) %>% 
+  ggplot(aes(x = Full, y = permutation_1)) +
+  geom_hline(yintercept = 0, color="red", linetype="dashed") +
+  geom_vline(xintercept = 0, color="red", linetype="dashed") +
+  geom_point() +
+  theme_gray(16) +
+  stat_smooth(method = "lm", formula = y ~ 0 + x) +
+  ggtitle(
+    "Downsampled vs full dataset",
+    subtitle = "Differential analysis results (comparison of Wald statistic)"
+  ) +
+  xlab("Full dataset (S9.6 vs dRNH Wald stat)") +
+  ylab("Downsampled dataset (S9.6 vs dRNH Wald stat)") +
+  ggpmisc::stat_poly_eq(
+    formula = y ~ 0 + x,
+    size=5,
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    parse = TRUE,
+  )
+
 
 
 ###### Percent of genome covered by consensus regions
