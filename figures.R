@@ -1748,7 +1748,7 @@ plt <- enhstats %>%
     values = c(
       "non-distal-enhancer" = "#d1d1d1",
       "distal-enhancer" = "#2b41af"
-    ), labels=c("Non-distal enhancer", "Distal Enhancer")
+    ), labels=c("Other", "Distal Enhancer")
   ) +
   guides(fill=guide_legend(title = NULL)) +
   ggtitle("Consensus peak proportion at distal enhancers") +
@@ -1756,6 +1756,57 @@ plt <- enhstats %>%
 
 plt
 ggsave(plt, filename = file.path(resloc, "consensus_pks_denh.png"))
+
+##### R2R: dEnh R-loop size #####
+pkenhsize <- lapply(pks, function(x) {
+  y <- gr2bed2(x)
+  ints <- valr::bed_intersect(y, gr2bed2(dEnh))
+  nms <- unique(y$name)
+  tibble(
+    "names" = nms
+  ) %>%
+    mutate(inenh = ifelse(names %in% ints$name.x, "Distal Enhancer", "Other")) %>%
+    group_by(inenh)
+}) %>% bind_rows(.id = "group")
+
+data4plot <- cons2 %>%
+  bind_rows(.id = "group") %>% 
+  inner_join(pkenhsize, by = c("group", "name" = "names")) %>% 
+  mutate(width = end - start) %>% 
+  select(group, name, width, inenh)
+
+
+plt <- data4plot %>% 
+  ggplot(aes(x = inenh, y = width, fill = inenh)) +
+  geom_violin(width = .6, position = position_dodge(.5), trim = F) +
+  geom_boxplot(width = .2, position = position_dodge(.5)) +
+  geom_jitter(position = position_jitterdodge(.1), size = .2, alpha = .2) +
+  facet_wrap(~group) + 
+  scale_y_log10(limits = c(1E2, 5E5)) +
+  theme_bw(base_size = 18) +
+  ylab("Peak width (log bp)") +
+  xlab(NULL) +
+  ggtitle("Consensus peak width distribution") +
+  guides(
+    fill = guide_legend(title = NULL), 
+    color = guide_legend(title = NULL)
+  ) +
+  ggpubr::stat_compare_means(
+    comparisons = list(c("Distal Enhancer", "Other")),
+    label = "p.format",
+    size = 5,
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Other" = "#d1d1d1",
+      "Distal Enhancer" = "#6786f9"
+    ), labels=c("Other", "Distal Enhancer")
+  ) +
+  ggpubr::rremove("legend") 
+plt
+
+#################################
+
 
 pltd <- ChIPpeakAnno::binOverFeature(
   pks3$`dRNH-shared`, pks3$`dRNH-only`, pks3$S9.6,
@@ -1952,6 +2003,171 @@ plt
 ggsave(plt, filename = file.path(resloc, "Cellmarker_CUTLL1_dENH.png"))
 
 
+### CTCF
+CTCF_CUTLL1_1 <- valr::read_narrowpeak(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3732nnn/GSM3732747/suppl/GSM3732747_CUTLL1_DMSO_sort_peaks.narrowPeak.bed.gz"
+) 
+CTCF_CUTLL1_2 <- valr::read_narrowpeak(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3732nnn/GSM3732744/suppl/GSM3732744_CUTLL1_CTCF2_sort_peaks.narrowPeak.bed.gz"
+)
+CTCF_CUTLL1_3 <- valr::read_narrowpeak(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3732nnn/GSM3732743/suppl/GSM3732743_CUTLL1_CTCF1_sort_peaks.narrowPeak.bed.gz"
+)
+CTCF_CUTLL1 <- reduce(
+  c(
+    GenomicRanges::makeGRangesFromDataFrame(CTCF_CUTLL1_1),
+    GenomicRanges::makeGRangesFromDataFrame(CTCF_CUTLL1_2),
+    GenomicRanges::makeGRangesFromDataFrame(CTCF_CUTLL1_3)
+  )
+)
+
+pltd <- ChIPpeakAnno::binOverFeature(
+  gris[[1]], gris[[2]], gris[[3]], gris[[4]], gris[[5]], gris[[6]],
+  annotationData = CTCF_CUTLL1,
+  radius = 5000, nbins = 100, FUN = length, errFun = 0,
+  xlab = "Distance from Enh (bp)", ylab = "count",
+  main = c(names(gris)[1], names(gris)[2])
+)
+plt <- pltd %>%
+  as.data.frame() %>%
+  rownames_to_column("pos") %>%
+  as_tibble() %>%
+  mutate(pos = as.numeric(pos)) %>%
+  dplyr::rename(
+    "SRX10484271" = 2, 
+    "SRX10484272" = 3, 
+    "SRX10484273" = 4,
+    "SRX10484274" = 5,
+    "SRX10484275" = 6,
+    "SRX10484276" = 7
+  ) %>%
+  pivot_longer(cols = !contains("pos")) %>%
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = .25) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Peak pileup around CTCF peaks", subtitle = "CUTLL1 MapR (dRNH) peaks") +
+  ylab("Peak density") +
+  xlab("Distance to CTCF (bp) (5->3)") +
+  theme_bw(14) +
+  theme(legend.title = element_blank()) +
+  scale_colour_brewer(type = "qual", palette = "Dark2")
+plt
+
+# Get the intergenic peaks from both CUTTL1 samples & find overlap
+gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+gri <- gri[which(sapply(gri$revmap, length) > 1), ]
+olde32 <- ChIPpeakAnno::findOverlapsOfPeaks(
+  GenomicRanges::makeGRangesFromDataFrame(CTCF_CUTLL1) %>% reduce(),
+  gri
+)
+# PCT olap
+length(unique(olde32$overlappingPeaks$`GenomicRanges..makeGRangesFromDataFrame.CTCF_CUTLL1......reduce..///gri`$peaks2)) / length(unique(olde31$all.peaks$gri))
+ChIPpeakAnno::makeVennDiagram(
+  olde32,
+  NameOfPeaks = c("CTCF peaks", "In"),
+  fill=c("gray", "#0BB490"), margin=.1
+)
+
+
+### SMC3
+SMC3_CUTLL1_1 <- valr::read_narrowpeak(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4230nnn/GSM4230108/suppl/GSM4230108_SMC3_rep1_sort_peaks.narrowPeak.bed.gz"
+) 
+SMC3_CUTLL1_2 <- valr::read_narrowpeak(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4230nnn/GSM4230109/suppl/GSM4230109_SMC3_rep2_sort_peaks.narrowPeak.bed.gz"
+)
+SMC3_CUTLL1 <- reduce(
+  c(
+    GenomicRanges::makeGRangesFromDataFrame(SMC3_CUTLL1_1),
+    GenomicRanges::makeGRangesFromDataFrame(SMC3_CUTLL1_2)
+  )
+)
+
+pltd <- ChIPpeakAnno::binOverFeature(
+  gris[[1]], gris[[2]], gris[[3]], gris[[4]], gris[[5]], gris[[6]],
+  annotationData = SMC3_CUTLL1,
+  radius = 5000, nbins = 100, FUN = length, errFun = 0,
+  xlab = "Distance from Enh (bp)", ylab = "count",
+  main = c(names(gris)[1], names(gris)[2])
+)
+plt <- pltd %>%
+  as.data.frame() %>%
+  rownames_to_column("pos") %>%
+  as_tibble() %>%
+  mutate(pos = as.numeric(pos)) %>%
+  dplyr::rename(
+    "SRX10484271" = 2, 
+    "SRX10484272" = 3, 
+    "SRX10484273" = 4,
+    "SRX10484274" = 5,
+    "SRX10484275" = 6,
+    "SRX10484276" = 7
+  ) %>%
+  pivot_longer(cols = !contains("pos")) %>%
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = .25) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Peak pileup around SMC3 peaks", subtitle = "CUTLL1 MapR (dRNH) peaks") +
+  ylab("Peak density") +
+  xlab("Distance to SMC3 (bp) (5->3)") +
+  theme_bw(14) +
+  theme(legend.title = element_blank()) +
+  scale_colour_brewer(type = "qual", palette = "Dark2")
+plt
+
+# Get the intergenic peaks from both iPSC samples & find overlap
+gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+gri <- gri[which(sapply(gri$revmap, length) > 1), ]
+olde33 <- ChIPpeakAnno::findOverlapsOfPeaks(
+  GenomicRanges::makeGRangesFromDataFrame(CTCF_CUTLL1) %>% reduce(),
+  GenomicRanges::makeGRangesFromDataFrame(SMC3_CUTLL1) %>% reduce(),
+  gri
+)
+# PCT olap
+length(unique(olde31$overlappingPeaks$`GenomicRanges..makeGRangesFromDataFrame.CTCF_iPS......reduce..///gri`$peaks2)) / length(unique(olde31$all.peaks$gri))
+ChIPpeakAnno::makeVennDiagram(
+  olde33,
+  NameOfPeaks = c("CTCF peaks", "SMC3 peaks", "In"),
+  fill=c("gray", "blue", "#0BB490"), margin=.1
+)
+combo <- c(A = 23189, B = 110, C = 3320, "A&B" = 4425, "A&C" = 963, "B&C" = 7, "A&B&C" = 289)
+fit <- eulerr::euler(
+  combo  
+)
+plot(fit)
+
+# Proportion plot
+tibble(
+  group = c(
+    "SMC3 + CTCF", "CTCF-only", "SMC3 + CTCF", "CTCF-only"
+  ),
+  group2 = c("No MapR", "No MapR", "MapR", "MapR"),
+  size = c(
+    4425, 23189, 289, 963
+  )
+) %>% 
+  group_by(group2) %>% 
+  mutate(pct = size / sum(size)) %>% 
+  ggplot(aes(x = group2, y = pct, fill = group)) +
+  geom_bar(stat = "identity", position = "stack", color="black") +
+  theme_bw(base_size = 14) +
+  coord_flip() +
+  ylab("Peak colocalization (%)") +
+  xlab(NULL) +
+  scale_fill_manual(
+    values = c(
+      "CTCF-only" = "#D1D1D2",
+      "SMC3 + CTCF" = "#9F87B5"
+    ),
+    guide = guide_legend(title = NULL, reverse = TRUE)
+  ) 
+
+
+
+
+
 ### iPSCs
 ct <- "iPSCs"
 
@@ -2073,6 +2289,166 @@ plt <- plttbl %>%
   ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
 
+
+#### Examine SA1/2/CTCF and TAD boundaries
+
+### CTCF
+CTCF_iPS <- valr::read_narrowpeak(
+  "https://www.encodeproject.org/files/ENCFF322WKG/@@download/ENCFF322WKG.bed.gz"
+) %>% 
+  filter(qvalue > 4)
+pltd <- ChIPpeakAnno::binOverFeature(
+  gris[[1]], gris[[2]], gris[[3]], gris[[4]],
+  annotationData = GenomicRanges::makeGRangesFromDataFrame(CTCF_iPS),
+  radius = 5000, nbins = 100, FUN = length, errFun = 0,
+  # featureSite = "bothEnd",
+  # PeakLocForDistance = "middle",
+  xlab = "Distance from Enh (bp)", ylab = "count"
+)
+plt <- pltd %>%
+  as.data.frame() %>%
+  rownames_to_column("pos") %>%
+  as_tibble() %>%
+  mutate(pos = as.numeric(pos)) %>%
+  dplyr::rename(
+    "SRX10505690" = 2, 
+    "SRX10505691" = 3, 
+    "SRX10505696" = 4,
+    "SRX10505697" = 5
+  ) %>%
+  pivot_longer(cols = !contains("pos")) %>%
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = .25) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Peak pileup around CTCF peaks", subtitle = "iPSCs MapR (dRNH) peaks") +
+  ylab("Peak density") +
+  xlab("Distance to CTCF (bp) (5->3)") +
+  theme_bw(14) +
+  theme(legend.title = element_blank()) +
+  scale_colour_brewer(type = "qual", palette = "Dark2")
+plt
+
+# Get the intergenic peaks from both iPSC samples & find overlap
+gri <- reduce(do.call("c", unlist(gris, use.names = F)), with.revmap = T)
+gri <- gri[which(sapply(gri$revmap, length) > 1), ]
+olde31 <- ChIPpeakAnno::findOverlapsOfPeaks(
+  GenomicRanges::makeGRangesFromDataFrame(CTCF_iPS) %>% reduce(),
+  gri
+)
+# PCT olap
+length(unique(olde31$overlappingPeaks$`GenomicRanges..makeGRangesFromDataFrame.CTCF_iPS......reduce..///gri`$peaks2)) / length(unique(olde31$all.peaks$gri))
+ChIPpeakAnno::makeVennDiagram(
+  olde31,
+  NameOfPeaks = c("CTCF peaks", "Intergenic dRNH sites"),
+  fill=c("gray", "#F58776"), margin=.1
+)
+
+
+
+
+### Loop anchors
+a2a <- read_tsv(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3177nnn/GSM3177704/suppl/GSM3177704_iPS.loops.txt.gz",
+  col_names = c("a1", "a2", "score", "signal", "pval")
+)
+locpat <- "(.+):(.+)\\-(.+)"
+a2a <- a2a %>% 
+  mutate(lid = row_number()) %>% 
+  pivot_longer(cols = c(a1, a2)) %>% 
+  mutate(aid = paste0(name, "_", lid)) %>% 
+  mutate(
+    chrom = gsub(value, pattern = locpat, replacement = "\\1"),
+    start = gsub(value, pattern = locpat, replacement = "\\2") %>% as.numeric(),
+    end = gsub(value, pattern = locpat, replacement = "\\3") %>% as.numeric(),
+    pval = ifelse(pval == 0, .Machine$double.xmin, pval),
+    pval = -log10(pval)
+  ) %>% 
+  select(chrom, start, end, score=pval, name=aid)
+topanchor <- a2a %>% 
+  filter(score > 10)
+
+# liftover
+chain <- "data/hg19_to_hg38.chain.gz"
+if (!file.exists(gsub(chain, pattern = "\\.gz", replacement = ""))) {
+  download.file(
+    "http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz", 
+    destfile = chain
+  )
+  R.utils::gunzip(chain)
+}
+chn2 <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
+lo <- GenomicRanges::makeGRangesFromDataFrame(topanchor, keep.extra.columns = T) %>% 
+  rtracklayer::liftOver(chain = chn2) %>% 
+  unlist() %>% 
+  unique()
+  
+download.file(
+  "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5032nnn/GSM5032462/suppl/GSM5032462_KO_D0_iPS_Rep1_RawMatrix_1kb.h5",
+  destfile = "tmp/iPS_HiC.h5"
+)
+iphic <- rhdf5::h5read("tmp/iPS_HiC.h5", name = "intervals") %>%
+  bind_cols() %>% 
+  select(chrom = chr_list, start = start_list, end = end_list, score = extra_list) %>% 
+  filter(score > 5)
+iphichg38 <- iphic %>% 
+  GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = T) %>% 
+  rtracklayer::liftOver(chain = chn2) %>% 
+  unlist() %>% 
+  unique()
+
+
+### SA1/2
+
+## Get CTCF consensus ##
+
+annFull[]
+
+########################
+
+
+annSA1 <- annFull$Cohesin__STAG1
+annSA2 <- annFull$Cohesin__STAG2
+annRAD21 <- annFull$encodeTFBS__RAD21
+annCTCF <- annFull$encodeTFBS__CTCF
+list(
+  "SA1" = annSA1,
+  "SA2" = annSA2,
+  # "RAD21" = annRAD21,
+  "CTCF" = annCTCF
+) -> ylst
+gen <- valr::read_genome("tmp/hg38.chrom.sizes")
+set.seed(42)
+pks4 %>% lapply(
+  function(x) {
+    x <- valr::gr_to_bed(x)
+    lapply(
+      ylst, function(y) {
+        valr::bed_fisher(
+          x,
+          # Down sample to match size range of other annotations
+          y = slice_sample(y, n = 2e4), 
+          genome = gen
+        )
+      }
+    ) %>% bind_rows(.id = "group")
+  }
+) %>% 
+  bind_rows(.id = "group2") %>% 
+  mutate(
+    p.value = ifelse(p.value == 0, .Machine$double.xmin, p.value),
+    `pval (-log10)` = -log10(p.adjust(p.value))
+  ) %>% 
+  dplyr::rename(`Odds Ratio`=estimate) %>% 
+  ggplot(aes(x = group2, y = `pval (-log10)`, fill = `Odds Ratio`)) +
+  geom_col(color = "black") +
+  facet_wrap(~group, nrow = 3) +
+  theme_bw(18) +
+  ggtitle("RL consensus enrichment", subtitle = "CTCF, SA1, and SA2") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Fisher test padj (-log10)") 
+  
 
 
 #### eRNA analysis ####
@@ -2236,6 +2612,8 @@ plt <- bind_rows(d1, d2) %>%
 
 plt
 ggsave(plt, filename = file.path(resloc, "iPSC_eRNA_expression_dENH.png"))
+
+
 
 ### CUTLL1
 ct <- "CUTLL1"
@@ -3550,6 +3928,7 @@ rlgr <- rlregions %>%
 ggplot(rlgr, aes(x = type, y = width, fill = type)) +
   geom_jitter(width = .15, alpha=.2) +
   scale_y_log10()
+
 
 
 
