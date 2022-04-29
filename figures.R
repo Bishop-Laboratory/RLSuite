@@ -3555,6 +3555,24 @@ ggplot(rlgr, aes(x = type, y = width, fill = type)) +
 
 ##### R2R: False negatives
 
+rlsamples %>% 
+  filter(mode == "MapR", genome == "mm10") %>%
+  mutate(
+    condition = case_when(
+      grepl(condition, pattern = "\\-t[0-9]{1}$") ~ "RNase T",
+      condition == "RNaseA" ~ "RNase A",
+      grepl(other, pattern = "ActD") ~ "Actinomycin D",
+      condition == "Input" & mode == "MapR" ~ "MNase", # This one was mislabeled
+      condition == "pAMNase" & mode == "MapR" ~ "MNase",
+      condition == "RNH" ~ "RNase H1",
+      condition == "RNHdMNase" ~ "NBSS",  # This one was mislabeled
+      TRUE ~ condition
+    )
+  ) %>% 
+  group_by(condition) %>% 
+  mutate(url = file.path(RLSeq:::RLBASE_URL, coverage_s3)) %>%
+  select(rlsample, label, condition, prediction, mode, tissue, other, url) %>% View()
+
 # Wrangle and repair condition names for plotting
 conds <- rlsamples %>% 
   filter(label == "NEG", prediction == "POS") %>% 
