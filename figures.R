@@ -1961,6 +1961,7 @@ ChIPpeakAnno::makeVennDiagram(
 )
 
 # For these overlapping peaks, what are they?
+num_sel <- 6
 dENH_gri <- olde3$overlappingPeaks$`dEnh///gri`
 ghfull %>%
   filter(
@@ -1995,8 +1996,8 @@ plt <- plttbl %>%
   ggplot(aes(x = Term, y = combined_score)) +
   geom_col(fill="#0BB490") +
   coord_flip() +
-  theme_bw(base_size = 14) +
-  ylab(NULL) +
+  theme_bw(base_size = 20) +
+  ylab("Combined Score") +
   xlab(NULL) +
   ggtitle("CUTLL1 dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
@@ -2188,7 +2189,7 @@ names(grs) <- ctl$rlsample
 
 ## Analyze feature distribution
 pal <- lapply(
-  grs, annotatePeak,
+  grs, ChIPseeker::annotatePeak,
   TxDb = txdb,
   tssRegion = c(-3000, 3000), verbose = T
 )
@@ -2229,7 +2230,7 @@ plt <- pltd %>%
   ggtitle("Peak pileup around distal enhancers", subtitle = "iPSCs MapR (dRNH) peaks") +
   ylab("Peak density") +
   xlab("Distance to distal enhancer (bp) (5->3)") +
-  theme_bw(14) +
+  theme_bw(20) +
   theme(legend.title = element_blank()) +
   scale_colour_brewer(type = "qual", palette = "Dark2")
 plt
@@ -2283,8 +2284,8 @@ plt <- plttbl %>%
   ggplot(aes(x = Term, y = combined_score)) +
   geom_col(fill="#F58776") +
   coord_flip() +
-  theme_bw(base_size = 14) +
-  ylab(NULL) +
+  theme_bw(base_size = 20) +
+  ylab("Combined Score") +
   xlab(NULL) +
   ggtitle("iPSCs dRNH-enhancer gene targets", subtitle = "Enrichment in CellMarker Database")
 plt
@@ -2324,7 +2325,7 @@ plt <- pltd %>%
   ggtitle("Peak pileup around CTCF peaks", subtitle = "iPSCs MapR (dRNH) peaks") +
   ylab("Peak density") +
   xlab("Distance to CTCF (bp) (5->3)") +
-  theme_bw(14) +
+  theme_bw(20) +
   theme(legend.title = element_blank()) +
   scale_colour_brewer(type = "qual", palette = "Dark2")
 plt
@@ -2398,33 +2399,66 @@ iphichg38 <- iphic %>%
   unique()
 
 
-### SA1/2
+### SA1/2 & consensus
 
-## Get CTCF consensus ##
+## Get CTCF consensus 
 
-annFull[]
+annCTCF <- annFull$encodeTFBS__CTCF
+pks4gr <- lapply(pks4, GenomicRanges::makeGRangesFromDataFrame)
+pltd <- ChIPpeakAnno::binOverFeature(
+  pks4gr[[1]], pks4gr[[2]], pks4gr[[3]],
+  annotationData = GenomicRanges::makeGRangesFromDataFrame(annCTCF),
+  radius = 5000, nbins = 100, FUN = length, errFun = 0,
+  # featureSite = "bothEnd",
+  # PeakLocForDistance = "middle",
+  xlab = "Distance from Enh (bp)", ylab = "count"
+)
+plt <- pltd %>%
+  as.data.frame() %>%
+  rownames_to_column("pos") %>%
+  as_tibble() %>%
+  mutate(pos = as.numeric(pos)) %>%
+  dplyr::rename("dRNH-shared" = 3, "dRNH-only" = 2, "S9.6" = 4) %>%
+  pivot_longer(cols = !contains("pos")) %>%
+  ggplot(aes(x = pos, y = value, color = name)) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = .25) +
+  geom_point(size=1.6) +
+  geom_line(size=1.1) +
+  ggtitle("Peak pileup around CTCF consensus", subtitle = "RL consensus peaks") +
+  ylab("Peak density") +
+  xlab("Distance to CTCF consensus peak (bp) (5->3)") +
+  theme_bw(20) +
+  theme(legend.title = element_blank()) +
+  scale_color_manual(
+    values = c(
+      "dRNH-only" = "#e2a3e3", 
+      "dRNH-shared" = "#ccb6cc", 
+      "S9.6" = "#82d0e8"
+    )
+  )
+plt
 
-########################
-
+## Full Cohesin
 
 annSA1 <- annFull$Cohesin__STAG1
 annSA2 <- annFull$Cohesin__STAG2
+annSMC3 <- annFull$encodeTFBS__SMC3
 annRAD21 <- annFull$encodeTFBS__RAD21
-annCTCF <- annFull$encodeTFBS__CTCF
 list(
   "SA1" = annSA1,
   "SA2" = annSA2,
-  # "RAD21" = annRAD21,
+  "RAD21" = annRAD21,
+  "SMC3" = annSMC3,
   "CTCF" = annCTCF
 ) -> ylst
 gen <- valr::read_genome("tmp/hg38.chrom.sizes")
-set.seed(42)
-pks4 %>% lapply(
+
+plt <- pks4 %>% lapply(
   function(x) {
     x <- valr::gr_to_bed(x)
     lapply(
       ylst, function(y) {
-        valr::bed_fisher(
+        set.seed(42); valr::bed_fisher(
           x,
           # Down sample to match size range of other annotations
           y = slice_sample(y, n = 2e4), 
@@ -2440,15 +2474,21 @@ pks4 %>% lapply(
     `pval (-log10)` = -log10(p.adjust(p.value))
   ) %>% 
   dplyr::rename(`Odds Ratio`=estimate) %>% 
+  mutate(
+    group2 = factor(group2, levels = rev(unique(.$group2)))
+  ) %>% 
   ggplot(aes(x = group2, y = `pval (-log10)`, fill = `Odds Ratio`)) +
   geom_col(color = "black") +
-  facet_wrap(~group, nrow = 3) +
-  theme_bw(18) +
-  ggtitle("RL consensus enrichment", subtitle = "CTCF, SA1, and SA2") +
+  facet_wrap(~group, ncol = 5) +
+  theme_bw(16) +
+  ggtitle("Peak enrichment at CTCF/Cohesin", subtitle = "RL consenus peaks") +
   coord_flip() +
   xlab(NULL) +
   ylab("Fisher test padj (-log10)") 
-  
+plt
+
+########################
+
 
 
 #### eRNA analysis ####
@@ -2475,7 +2515,6 @@ pkschrom <- lapply(
 )
 
 chain <- "data/hg38_to_hg19.chain.gz"
-chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
 if (!file.exists(gsub(chain, pattern = "\\.gz", replacement = ""))) {
   download.file(
     "http://hgdownload.cse.ucsc.edu/goldenpath/hg38/liftOver/hg38ToHg19.over.chain.gz", 
@@ -2483,6 +2522,7 @@ if (!file.exists(gsub(chain, pattern = "\\.gz", replacement = ""))) {
   )
   R.utils::gunzip(chain)
 }
+chn <- rtracklayer::import.chain(gsub(chain, pattern = "\\.gz", replacement = ""))
 
 ### iPSCs
 
@@ -2593,7 +2633,7 @@ plt <- bind_rows(d1, d2) %>%
   ggpubr::stat_compare_means(
     method.args = list(alternative = "greater"),
     comparisons = list(c("dRNH-accessible dEnh", "Total dEnh")),
-    label = "p.format"
+    label = "p.format", size = 5
   ) +
   xlab(NULL) +
   ylab("eRNA RPKM (log2 + 1)") +
@@ -2601,7 +2641,7 @@ plt <- bind_rows(d1, d2) %>%
     paste0(ct, " distal enhancer RNA profile"),
     subtitle = "dRNH-accessible vs total enhancer population"
   ) +
-  theme_classic(base_size = 14) +
+  theme_classic(base_size = 20) +
   scale_fill_manual(
     values = c(
       "dRNH-accessible dEnh" = "#F58776",
@@ -2695,7 +2735,7 @@ plt <- bind_rows(d1, d2) %>%
   ggpubr::stat_compare_means(
     method.args = list(alternative = "greater"),
     comparisons = list(c("dRNH-bound dEnh", "Total dEnh")),
-    label = "p.format"
+    label = "p.format", size = 5
   ) +
   xlab(NULL) +
   ylab("eRNA RPKM (log2 + 1)") +
@@ -2703,7 +2743,7 @@ plt <- bind_rows(d1, d2) %>%
     paste0(ct, " distal enhancer RNA profile"),
     subtitle = "dRNH-accessible vs total enhancer population"
   ) +
-  theme_classic(base_size = 14) +
+  theme_classic(base_size = 20) +
   scale_fill_manual(
     values = c(
       "dRNH-bound dEnh" = "#0BB490",
