@@ -162,7 +162,7 @@ plot_multi_feature <- function(features, db, pltdat, lmts, yb, factororder, axis
     as.list() %>%
     bind_rows() %>%
     filter(type %in% {{ features }}, 
-           db == {{ db }}) %>%
+           db %in% {{ db }}) %>%
     filter(stat_fisher_rl > lmts[1], stat_fisher_rl < lmts[2]-1,
            ! is.na(prediction)) %>%
     mutate(type = factor(type, levels = factororder),

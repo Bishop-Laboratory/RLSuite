@@ -11,7 +11,10 @@ venv/
 *.fasta
 *.tgz
 *.html
+*G4Hunter*
+*g4hunter*
 .Rproj.user
+*.fa
 *databases/
 *.gz
 *.bed

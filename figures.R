@@ -344,7 +344,6 @@ toplt <- rlfsTbl %>%
 ## Fig S3 ##
 
 # With just selected samples
-# TODO: Need to pick different samples
 pos_pos <- c(
   "SRX3084731",
   "SRX4776642",
@@ -500,14 +499,16 @@ cat_cols <- list(
   "prediction" = setNames(RLSeq:::auxdata$prediction_cols$col, nm = RLSeq:::auxdata$prediction_cols$prediction),
   "Total (n)" = RColorBrewer::brewer.pal(n = 9, "OrRd")
 )
-chm <- ComplexHeatmap::pheatmap(heatdata, color = colors1, main = "Percentage samples labels by Mode",
-                                fontsize = 13, cluster_rows = FALSE, cluster_cols = FALSE,
-                                display_numbers = TRUE, fontsize_number = 10.5,
-                                annotation_col = annocol[colnames(heatdata), , drop=FALSE], 
-                                show_colnames = FALSE, name = "Representation (%)",
-                                annotation_colors = cat_cols, use_raster=FALSE,
-                                annotation_row = annorow[rownames(heatdata),,drop=FALSE],
-                                number_color = "black", angle_col = "0")
+chm <- ComplexHeatmap::pheatmap(
+  heatdata, color = colors1, main = "Percentage samples labels by Mode",
+  fontsize = 13, cluster_rows = FALSE, cluster_cols = FALSE,
+  display_numbers = TRUE, fontsize_number = 10.5,
+  annotation_col = annocol[colnames(heatdata), , drop=FALSE], 
+  show_colnames = FALSE, name = "Representation (%)",
+  annotation_colors = cat_cols, use_raster=FALSE,
+  annotation_row = annorow[rownames(heatdata),,drop=FALSE],
+  number_color = "black", angle_col = "0"
+)
 
 pdf(qq("results/Figure_2/heatmap_representation.pdf"), 
     width = 8, height = 8)
@@ -584,35 +585,89 @@ ComplexHeatmap::draw(hm)
 dev.off()
 
 ## Show the strength of these results with the top hit
-pltdat <- RLSeq::plotEnrichment(rlr, returnData = TRUE, 
-                                pred_POS_only = FALSE,
-                                rlbaseRes = sampleAnno, 
-                                rlsamples = rlsamples,
-                                label_POS_only = FALSE) 
+pltdat <- RLSeq::plotEnrichment(
+  rlr, returnData = TRUE, 
+  pred_POS_only = FALSE,
+  rlbaseRes = sampleAnno, 
+  rlsamples = rlsamples,
+  label_POS_only = FALSE
+) 
 
 # Genes
-plt <- plot_multi_feature(features = unique(pltdat$Transcript_Features$type), db = "Transcript_Features", 
-                          factororder = c("TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS"),
-                          pltdat = pltdat,
-                          lmts = c(-6, 12),
-                          axislmts = c(-6, 15),
-                          yb = 11.5) +
+plt <- plot_multi_feature(
+  features = unique(pltdat$Transcript_Features$type),
+  db = "Transcript_Features", 
+  factororder = c("TSS", "fiveUTR", "Exon", "Intron", "threeUTR", "TTS"),
+  pltdat = pltdat,
+  lmts = c(-6, 12),
+  axislmts = c(-6, 15),
+  yb = 11.5
+) +
   ggtitle("Genic Feature Enrichment in RLBase samples", subtitle = NULL) + xlab(NULL)
 ggsave(plt, filename = "results/Figure_3/genic_enrichment.svg", height = 5, width = 11)
 
 # G4Q
 pltdat2 <- pltdat
-pltdat2$G4Qpred$type <- "G4Q Predicted"
-pltdat2$G4Qexp$type <- "G4Q ChIP"
-feats <- c("G4Q Predicted", "G4Q ChIP")
-plt <- plot_multi_feature(features = feats, db = c("G4Qpred", "G4Qexp"), 
-                          factororder = feats,
-                          pltdat = pltdat2,
-                          lmts = c(-6, 7),
-                          axislmts = c(-6, 8),
-                          yb = 11.5) +
+pltdat2$G4Qpred$type <- "G4 Predicted"
+pltdat2$G4Qexp$type <- "G4 ChIP"
+feats <- c("G4 Predicted", "G4 ChIP")
+plt <- plot_multi_feature(
+  features = feats, db = c("G4Qpred", "G4Qexp"), 
+  factororder = feats,
+  pltdat = pltdat2,
+  lmts = c(-6, 7),
+  axislmts = c(-6, 8),
+  yb = 11.5
+) +
   ggtitle("G4Q Enrichment in RLBase samples", subtitle = NULL) + xlab(NULL)
+plt
 ggsave(plt, filename = "results/Figure_3/g4q_enrichment.svg", height = 5, width = 7)
+
+
+# GC Skew
+plt <- plot_multi_feature(
+  features = c("G SKEW", "C SKEW", "CpG Islands"), db = c("skewr", "CpG_Islands"), 
+  factororder = c("CpG Islands", "G SKEW", "C SKEW"),
+  pltdat = pltdat,
+  lmts = c(-6, 8),
+  axislmts = c(-6, 10),
+  yb = 11.5
+) +
+  ggtitle("G/C Skew Enrichment in RLBase samples", subtitle = NULL) + xlab(NULL)
+plt
+ggsave(plt, filename = "results/Figure_3/gc_enrichment.svg", height = 5, width = 9)
+
+to_collect <- c(
+  "SRX1070678", 
+  "SRX9182646",
+  "SRX8122769",
+  "SRX2683605",
+  "SRX5547605",
+  "SRX10229647"
+)
+rlsamples %>% 
+  filter(rlsample %in% to_collect) %>% 
+  pull(peaks_s3) %>% 
+  paste0(RLSeq:::RLBASE_URL, "/", .) %>% 
+  cat(sep = "\n")
+
+# track type=broadPeak name=" " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX1070678_hg38.broadPeak
+# 
+# track type=broadPeak name="  " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX8122769_hg38.broadPeak
+# 
+# track type=broadPeak name="   " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX9182646_hg38.broadPeak
+# 
+# track type=broadPeak name="    " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX10229647_hg38.broadPeak
+# 
+# track type=broadPeak name="     " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX2683605_hg38.broadPeak
+# 
+# track type=broadPeak name="      " useScore=0
+# https://rlbase-data.s3.amazonaws.com/peaks/SRX5547605_hg38.broadPeak
 
 
 ### Figure 4/S5 ###
@@ -961,16 +1016,16 @@ ctsPos <- cts[
   gsub(rownames(cts), pattern = "All_", replacement = "") %in% rlregions$rlregion[rlregions$source == "dRNH S96"]
   ,
   # ! is.na(cts$prediction) &
-    # cts$prediction == "POS" & 
-    cts$experiment %in% ip_correct &
+  # cts$prediction == "POS" & 
+  cts$experiment %in% ip_correct &
     cts$label == "POS" 
-    # cts$numPeaks > 5000
+  # cts$numPeaks > 5000
 ]
 ctsmat <- ctsPos@assays@data$cts
 vstmat <- DESeq2::vst(ctsmat)
 pcdata <- prcomp(t(vstmat))
 pcsmall <- pcdata$x[,1:7]
-
+pctpc <- round(100 * pcdata$sdev / sum(pcdata$sdev), digits = 2)
 pltdat <- pcsmall %>% 
   as.data.frame() %>%
   rownames_to_column(var = "name") %>%
@@ -989,7 +1044,9 @@ pltpca <- as_tibble(pltdat) %>%
   geom_point(size=2.5) +
   facet_wrap(~ip_type, nrow = 2) +
   theme_bw(base_size = 17) +
-  ggtitle("PCA with false positive samples included")
+  ggtitle("PCA with false positive samples included") +
+  xlab(paste0("PC1 (", pctpc[1], "%)")) +
+  ylab(paste0("PC2 (", pctpc[2], "%)")) 
 pltpca
 ggsave(plot = pltpca, filename = "results/Figure_5/pca_plot_with_false_pos.png", height = 10, width = 6)
 
@@ -1007,6 +1064,7 @@ ctsmat <- ctsPos@assays@data$cts
 vstmat <- DESeq2::vst(ctsmat)
 pcdata <- prcomp(t(vstmat))
 pcsmall <- pcdata$x[,1:7]
+pctpc <- round(100 * pcdata$sdev / sum(pcdata$sdev), digits = 2)
 pltdat <- pcsmall %>% 
   as.data.frame() %>%
   rownames_to_column(var = "name") %>%
@@ -1023,7 +1081,9 @@ pltpca <- pltdat %>%
   geom_point(size=2.5) +
   scale_color_manual(values = ip_cols) +
   theme_bw(base_size = 17)  +
-  guides(color=guide_legend(title = NULL)) 
+  guides(color=guide_legend(title = NULL))  +
+  xlab(paste0("PC1 (", pctpc[1], "%)")) +
+  ylab(paste0("PC2 (", pctpc[2], "%)")) 
 pltpca
 ggsave(plot = pltpca, filename = "results/Figure_5/pca_plot.svg", height = 5, width = 7)
 
@@ -1137,7 +1197,9 @@ plts <- lapply(to_plt, function(pt) {
     geom_vline(xintercept = 0, color="grey", alpha = 1, linetype = "dashed") +
     geom_point(size=2.5) +
     scale_color_viridis_c(option = "A", direction = -1) +
-    theme_bw(base_size = 17)
+    theme_bw(base_size = 17) +
+    xlab(paste0("PC1 (", pctpc[1], "%)")) +
+    ylab(paste0("PC2 (", pctpc[2], "%)")) 
   ggsave(
     plot = plt,
     filename = paste0("results/Figure_5/pca_feature_plot_", gsub(pt, pattern = "All_", replacement = ""),".png"),
@@ -1778,12 +1840,12 @@ data4plot <- cons2 %>%
 
 plt <- data4plot %>% 
   ggplot(aes(x = inenh, y = width, fill = inenh)) +
-  geom_violin(width = .6, position = position_dodge(.5), trim = F) +
-  geom_boxplot(width = .2, position = position_dodge(.5)) +
-  geom_jitter(position = position_jitterdodge(.1), size = .2, alpha = .2) +
+  geom_violin(width = .6, position = position_dodge(.5), trim = F, alpha = .3) +
+  geom_boxplot(width = .2, position = position_dodge(.5), alpha = .3) +
+  geom_jitter(position = position_jitterdodge(.1), size = .25, alpha = .2) +
   facet_wrap(~group) + 
   scale_y_log10(limits = c(1E2, 5E5)) +
-  theme_bw(base_size = 18) +
+  theme_bw(base_size = 20) +
   ylab("Peak width (log bp)") +
   xlab(NULL) +
   ggtitle("Consensus peak width distribution") +
@@ -1798,8 +1860,8 @@ plt <- data4plot %>%
   ) +
   scale_fill_manual(
     values = c(
-      "Other" = "#d1d1d1",
-      "Distal Enhancer" = "#6786f9"
+      "Other" = "#d2d2d2",
+      "Distal Enhancer" = "#38499f"
     ), labels=c("Other", "Distal Enhancer")
   ) +
   ggpubr::rremove("legend") 
@@ -2383,7 +2445,7 @@ lo <- GenomicRanges::makeGRangesFromDataFrame(topanchor, keep.extra.columns = T)
   rtracklayer::liftOver(chain = chn2) %>% 
   unlist() %>% 
   unique()
-  
+
 download.file(
   "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM5032nnn/GSM5032462/suppl/GSM5032462_KO_D0_iPS_Rep1_RawMatrix_1kb.h5",
   destfile = "tmp/iPS_HiC.h5"
@@ -4100,10 +4162,10 @@ plt <- plot_ly(type = "pie", size = I(.01)) %>%
          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
 plt
 save_image(plt, file = "results/Figure_3/false_neg_cond_donut.svg", width = 300, height = 300, format = "svg")
-  
-  
 
-  
+
+
+
 ##### R2R: reproducibility with down sample
 
 ## Get differential RL Regions
@@ -4228,6 +4290,8 @@ df %>%
 
 ###### Percent of genome covered by consensus regions
 locpat <- "(.+):(.+)-(.+):(.+)"
+
+### Total coverage
 rlgr <- rlregions %>%
   dplyr::select(location) %>%
   mutate(
@@ -4247,13 +4311,37 @@ wg <- 3209286105
 prop <- rs/wg  # From http://genomewiki.ucsc.edu/index.php/Hg38_7-way_Genome_size_statistics
 prop
 
+
+### Shared coverage
+rlgr <- rlregions %>%
+  filter(source == "dRNH S96") %>% 
+  dplyr::select(location) %>%
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = as.numeric(gsub(location, pattern = locpat, replacement = "\\2")),
+    end = as.numeric(gsub(location, pattern = locpat, replacement = "\\3"))
+  ) %>%
+  dplyr::select(-location) %>%
+  GenomicRanges::makeGRangesFromDataFrame() %>%
+  GenomicRanges::reduce() 
+
+rs <- rlgr %>% 
+  GenomicRanges::width() %>%
+  sum()
+
+wg <- 3209286105
+prop <- rs/wg  # From http://genomewiki.ucsc.edu/index.php/Hg38_7-way_Genome_size_statistics
+prop
+
+
+### PCT plot
 plt <- plot_ly(type = "pie") %>%
   add_pie(data=tibble(
     group=c("  ", " "),
     size=c(rs, (wg - rs))
   ) %>% mutate(pct = round(100*size/sum(size), 2)),
   values = ~pct, labels = ~group, textinfo='label+value',
-          insidetextorientation='horizontal', hole=.6, rotation=186) %>%
+  insidetextorientation='horizontal', hole=.6, rotation=186) %>%
   layout(showlegend = FALSE, margin = list(l = 100, r = 100, t=100, b=100),
          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
