@@ -315,8 +315,8 @@
 <text x='179.97' y='328.54' text-anchor='middle' style='font-size: 13.60px; fill: #4D4D4D; font-family: Liberation Sans;' textLength='22.20px' lengthAdjust='spacingAndGlyphs'>-50</text>
 <text x='256.86' y='328.54' text-anchor='middle' style='font-size: 13.60px; fill: #4D4D4D; font-family: Liberation Sans;' textLength='8.65px' lengthAdjust='spacingAndGlyphs'>0</text>
 <text x='333.75' y='328.54' text-anchor='middle' style='font-size: 13.60px; fill: #4D4D4D; font-family: Liberation Sans;' textLength='17.29px' lengthAdjust='spacingAndGlyphs'>50</text>
-<text x='227.95' y='348.00' text-anchor='middle' style='font-size: 17.00px; font-family: Liberation Sans;' textLength='32.94px' lengthAdjust='spacingAndGlyphs'>PC1</text>
-<text transform='translate(20.86,159.74) rotate(-90)' text-anchor='middle' style='font-size: 17.00px; font-family: Liberation Sans;' textLength='32.94px' lengthAdjust='spacingAndGlyphs'>PC2</text>
+<text x='227.95' y='348.00' text-anchor='middle' style='font-size: 17.00px; font-family: Liberation Sans;' textLength='105.61px' lengthAdjust='spacingAndGlyphs'>PC1 (5.37%)</text>
+<text transform='translate(20.86,159.74) rotate(-90)' text-anchor='middle' style='font-size: 17.00px; font-family: Liberation Sans;' textLength='105.61px' lengthAdjust='spacingAndGlyphs'>PC2 (3.35%)</text>
 <rect x='414.38' y='129.76' width='81.15' height='59.96' style='stroke-width: 1.65; stroke: none; fill: #FFFFFF;' />
 <rect x='422.85' y='146.69' width='17.28' height='17.28' style='stroke-width: 1.65; stroke: none; fill: #FFFFFF;' />
 <circle cx='431.49' cy='155.33' r='3.02' style='stroke-width: 0.71; stroke: #C16FAD; fill: #C16FAD;' />

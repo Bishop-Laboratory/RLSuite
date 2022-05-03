@@ -4395,6 +4395,48 @@ ggsave(
 
 
 
+##### Figshare export
+
+dir.create("results/FigShare", showWarnings = F)
+
+## RL_regions.csv
+locpat <- "(.+):(.+)-(.+):(.+)"
+rlrm <- rlregions_meta()
+rlrm %>% 
+  mutate(
+    chrom = gsub(location, pattern = locpat, replacement = "\\1"),
+    start = gsub(location, pattern = locpat, replacement = "\\2"),
+    end = gsub(location, pattern = locpat, replacement = "\\3")
+  ) %>% 
+  arrange(desc(conservation_pct)) %>% 
+  select(
+    RLRegion = rlregion,
+    chrom, start, end, 
+    `Source (ip_type)`=source,
+    `Conservation (%)`=conservation_pct,
+    `# Studies`=nStudies,
+    `Genes (overlapping)`=allGenes,
+    `In repeat region`=is_repeat,
+    `In RLFS`=is_rlfs
+  ) %>% 
+  write_csv("results/FigShare/RL_regions.csv")
+
+## RL_regions_differential_abundance.csv
+restbl %>% 
+  select(1:7) %>% 
+  write_csv("results/FigShare/RL_regions_differential_abundance.csv")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

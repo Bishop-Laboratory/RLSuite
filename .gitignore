@@ -13,6 +13,7 @@ venv/
 *.html
 *G4Hunter*
 *g4hunter*
+*FigShare*
 .Rproj.user
 *.fa
 *databases/
