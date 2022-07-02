@@ -1,7 +1,7 @@
 # Analysis for Miller et al. 2022
 
 **Purpose**: The purpose of this repo is to enable replication of the 
-figures and analyses from the *Miller et al., 2022* manuscript. The preprint of this manuscript is found [here](https://www.biorxiv.org/content/10.1101/2021.11.01.466823v2.full). 
+figures and analyses from the *Miller et al., 2022* manuscript. The published version of the manuscript is found [here](https://doi.org/10.1093/nar/gkac537). 
 
 ## Quick-start
 
